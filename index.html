@@ -78,7 +78,7 @@ const SEED=[{id:1,titel:"Quiche Lorraine – der Klassiker",kat:["Hauptgericht",
  "Ca. 35 Min. im Ofen backen."],
  var:{veg:{titel:"Quiche Lorraine (vegetarisch)",hinweis:"Räuchertofu in etwas Öl knusprig braten; 1 TL geräuchertes Paprikapulver für das Raucharoma.",
   zutaten:null,ersetze:{"Speckwürfel":"Räuchertofu, gewürfelt"}}}}];
-const K="kochbuch-v2",VER="2026-10-18 · Pläne";
+const K="kochbuch-v2",VER="2026-10-18 · Sync-Prüfung";
 let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest",gh:"",ghRepo:"",meta:{},smeta:{},plans:[],tomb:{},catsMeta:{h:"",u:0},syncAt:0,syncSt:"",plan:{n:5,days:[],wish:"",neu:true}},JSON.parse(localStorage.getItem(K)||"{}"));
 const rawSave=()=>localStorage.setItem(K,JSON.stringify(S));
 const save=()=>{rawSave();schedSync()};
@@ -384,7 +384,11 @@ function merge(rem){rem=rem||{rez:[],cats:null,catsU:0,tomb:{}};
  sout.sort((a,b)=>a.id<b.id?-1:1);
  return{out,meta,tomb,cats,catsU,sout,smeta}}
 function saveSync(){S.ghRepo=$("#ghr").value.trim().replace(/^https?:\/\/github\.com\//,"").replace(/\.git$/,"").replace(/\/$/,"");S.gh=$("#ght").value.trim();rawSave();
- if(!S.ghRepo||!S.gh)return toast("Bitte Repo und Schlüssel eintragen");render();toast("Gespeichert ✓ synchronisiere …");setSt("Synchronisiere …");sync(true)}
+ if(!S.ghRepo||!S.gh)return toast("Bitte Repo und Schlüssel eintragen");
+ if(!/^[\w.-]+\/[\w.-]+$/.test(S.ghRepo))return alert("Repo bitte so eintragen: besitzer/name, z. B. robinroth12345/kochbuch-daten");
+ if(/\/kochbuch$/i.test(S.ghRepo))return alert("Das ist das öffentliche App-Repo. Deine Rezepte gehören in das private Daten-Repo, z. B. robinroth12345/kochbuch-daten. Dort sind sie nicht für andere sichtbar.");
+ if(!/^(github_pat_|ghp_)/.test(S.gh)||S.gh.length<40)return alert("Das sieht nicht nach einem vollständigen Schlüssel aus ("+S.gh.length+" Zeichen). Ein Fine-grained Token beginnt mit github_pat_ und ist etwa 93 Zeichen lang. Bitte komplett kopieren.");
+ render();toast("Gespeichert ✓ synchronisiere …");setSt("Synchronisiere …");sync(true)}
 async function sync(manual){
  if(!S.gh||!S.ghRepo){if(manual)toast("Repo und Schlüssel eintragen");return}
  if(syncing){pendingSync=true;if(manual)toast("Synchronisierung läuft schon …");return}syncing=true;setSt("Synchronisiere …");
