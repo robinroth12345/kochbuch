@@ -40,9 +40,8 @@ textarea{min-height:110px}
 .hero{width:100%;max-height:230px;object-fit:cover;border-radius:var(--r);margin-bottom:12px;display:block}
 .thumb{width:62px;height:62px;border-radius:calc(var(--r) - 4px);object-fit:cover;flex:none}
 #cook{position:fixed;inset:0;z-index:20;background:var(--bg);padding:16px;overflow:auto}
-.cs{font-size:22px;line-height:1.5;margin:16px 0}
-.tm{margin:8px 0;padding:8px 12px;border:1px solid var(--acc);border-radius:10px;background:var(--card)}
-#tbar{position:fixed;top:0;left:0;right:0;z-index:15;padding:6px 12px;background:var(--bg);box-shadow:0 2px 8px #0003}#tbar .tm{margin:4px 0}
+.cs{font-size:26px;line-height:1.55;margin:16px 0}.big{min-height:52px;font-size:18px;padding:10px 18px}.tcard{border:1px solid var(--line);border-radius:var(--r);padding:12px;margin:10px 0;background:var(--card)}.tmin{font-size:34px;font-weight:700;color:var(--acc)}.rb{width:48px;height:48px;border-radius:50%;border:1px solid var(--acc);background:none;color:var(--acc);font-size:26px;flex:none}
+#tbar{position:fixed;top:0;left:0;right:0;z-index:15;padding:6px 12px;background:var(--bg);box-shadow:0 2px 8px #0003}#tbar .tcard{margin:4px 0;padding:8px 12px}#tbar .tmin{font-size:22px}
 nav button{font-size:11px!important;padding:10px 0!important}#tbar{cursor:pointer}
 </style></head><body>
 <header><h1>🍳 Rothes Kochbuch</h1></header>
@@ -79,7 +78,7 @@ const SEED=[{id:1,titel:"Quiche Lorraine – der Klassiker",kat:["Hauptgericht",
  "Ca. 35 Min. im Ofen backen."],
  var:{veg:{titel:"Quiche Lorraine (vegetarisch)",hinweis:"Räuchertofu in etwas Öl knusprig braten; 1 TL geräuchertes Paprikapulver für das Raucharoma.",
   zutaten:null,ersetze:{"Speckwürfel":"Räuchertofu, gewürfelt"}}}}];
-const K="kochbuch-v2",VER="2026-10-18 · Timer-Tab";
+const K="kochbuch-v2",VER="2026-10-18 · Timer 3";
 let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest",gh:"",ghRepo:"",meta:{},tomb:{},catsMeta:{h:"",u:0},syncAt:0,syncSt:"",plan:{n:5,days:[],wish:"",neu:true}},JSON.parse(localStorage.getItem(K)||"{}"));
 const rawSave=()=>localStorage.setItem(K,JSON.stringify(S));
 const save=()=>{rawSave();schedSync()};
@@ -263,8 +262,8 @@ function imgPick(i){const x=imgS.res[i],id=imgS.id,im=new Image();im.crossOrigin
  im.onerror=()=>toast("Bild konnte nicht geladen werden");im.src=x.url}
 /* ---------- Kochmodus ---------- */
 let cook=null,timers=[],wl=null;
-async function cookStart(id){cook={id,i:0,ing:false};try{wl=await navigator.wakeLock?.request("screen")}catch(e){}cookRender()}
-function cookEnd(){cook=null;try{wl?.release()}catch(e){}wl=null;cookRender()}
+async function cookStart(id){cook={id,i:0,ing:false,mins:{}};try{wl=await navigator.wakeLock?.request("screen")}catch(e){}cookRender()}
+function cookEnd(){cook=null;try{wl?.release()}catch(e){}wl=null;if(timers.length){tab="timer";cur=null;render()}cookRender()}
 function cookDone(){const r=S.rez.find(x=>x.id===cook.id);r.cooked=[...(r.cooked||[]),Date.now()];save();cookEnd();toast("Guten Appetit! 🍽");render()}
 function timerView(){return `<div class="card"><b class="head">⏱ Timer</b>
  <div class="chips" style="padding:8px 0">${[[5,"5 Min."],[10,"10 Min."],[15,"15 Min."],[30,"30 Min."],[60,"1 Std."]].map(([m,t])=>`<button class="chip" onclick="addTimer('${t}',${m})">${t}</button>`).join("")}</div>
@@ -274,12 +273,14 @@ function stepTimers(r,i){const z=r.zeiten&&r.zeiten[i];if(Array.isArray(z))retur
  const out=[],re=/(\d+)(?:\s*[–-]\s*(\d+))?\s*(Min\.?|Minuten|Std\.?|Stunden?)/gi;let m;while((m=re.exec(r.schritte[i]))){out.push({l:m[0],min:+(m[2]||m[1])*(/^S/i.test(m[3])?60:1)})}return out}
 const tsave=()=>{try{localStorage.setItem("kochbuch-timers",JSON.stringify(timers))}catch(e){}};
 try{timers=JSON.parse(localStorage.getItem("kochbuch-timers")||"[]")}catch(e){}
-function addTimer(label,min){min=parseFloat(String(min).replace(",","."));if(!(min>0))return toast("Minuten eintragen");timers.push({end:Date.now()+min*60000,label:label||"Timer",done:false});tsave();cookRender()}
-function timerStart(j){const t=stepTimers(cur_(),cook.i)[j];addTimer(t.l,$("#tmin"+j).value)}
-function timerAll(){stepTimers(cur_(),cook.i).forEach((t,j)=>{const m=parseFloat(String($("#tmin"+j).value).replace(",","."));if(m>0)timers.push({end:Date.now()+m*60000,label:t.l,done:false})});tsave();cookRender()}
+function addTimer(label,min,rid){min=parseFloat(String(min).replace(",","."));if(!(min>0))return toast("Minuten eintragen");const r=rid&&S.rez.find(x=>x.id===rid);timers.push({end:Date.now()+min*60000,label:label||"Timer",done:false,rid:rid||null,rt:r?r.titel:""});tsave();cookRender()}
+const tmin=j=>cook.mins[cook.i+"_"+j]??stepTimers(cur_(),cook.i)[j].min;
+function tmAdj(j,d){const m=tmin(j),st=m>=20?5:1;cook.mins[cook.i+"_"+j]=Math.max(1,m+d*st);cookRender()}
+function timerStart(j){addTimer(stepTimers(cur_(),cook.i)[j].l,tmin(j),cook.id)}
+function timerAll(){stepTimers(cur_(),cook.i).forEach((t,j)=>timers.push({end:Date.now()+tmin(j)*60000,label:t.l,done:false,rid:cook.id,rt:S.rez.find(x=>x.id===cook.id)?.titel||""}));tsave();cookRender()}
 const cur_=()=>current(S.rez.find(x=>x.id===cook.id));
 const mmss=s=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return(h?h+":"+String(m).padStart(2,"0"):m)+":"+String(s%60).padStart(2,"0")};
-function timersHtml(){return timers.map((t,i)=>`<div class="tm row"><span>⏱ ${esc(t.label)}: <b>${t.done?"⏰ abgelaufen":mmss(Math.max(0,Math.round((t.end-Date.now())/1000)))}</b></span><span>${t.done?"":`<button class="chip" onclick="timers[${i}].end+=300000;tsave();cookRender()">+5</button> `}<button class="chip" onclick="timers.splice(${i},1);tsave();cookRender()">✕</button></span></div>`).join("")}
+function timersHtml(){return timers.map((t,i)=>`<div class="tcard"><div class="row"><b>${esc(t.label)}</b><span>${t.done?"":`<button class="chip" onclick="timers[${i}].end+=300000;tsave();cookRender()">+5</button> `}<button class="chip" onclick="timers.splice(${i},1);tsave();cookRender()">✕</button></span></div>${t.rt?`<div class="mut">📖 ${esc(t.rt)}</div>`:""}<div class="tmin" style="margin-top:4px">${t.done?"⏰ abgelaufen":mmss(Math.max(0,Math.round((t.end-Date.now())/1000)))}</div></div>`).join("")}
 function beep(){try{const a=new(window.AudioContext||window.webkitAudioContext)();[0,.35,.7].forEach(d=>{const o=a.createOscillator();o.frequency.value=880;o.connect(a.destination);o.start(a.currentTime+d);o.stop(a.currentTime+d+.2)})}catch(e){}try{navigator.vibrate?.([300,150,300,150,300])}catch(e){}}
 function tick(){timers.forEach(t=>{if(!t.done&&Date.now()>=t.end){t.done=true;tsave();beep();toast("⏰ "+t.label+" ist um!")}});
  const e=document.getElementById("tms");if(cook&&e)e.innerHTML=timersHtml();
@@ -300,11 +301,11 @@ function cookRender(){let o=document.getElementById("cook");if(!cook){o&&o.remov
  const r0=S.rez.find(x=>x.id===cook.id),r=current(r0),n=r.schritte.length,s=r.schritte[cook.i],k=(S.faktor[r0.id]||r0.por)/r0.por,ts=stepTimers(r,cook.i);
  o.innerHTML=`<div class="row"><b class="head">${esc(r.titel)}</b><button class="chip" onclick="cookEnd()">✕ Beenden</button></div><div class="mut">Schritt ${cook.i+1} von ${n}</div>
  <div class="cs">${esc(s)}</div>
- <div class="card">${ts.map((t,j)=>`<div class="row" style="margin-bottom:6px"><span>${esc(t.l)}</span><span><input type="text" inputmode="decimal" id="tmin${j}" value="${t.min}" style="width:64px;display:inline;text-align:center"> Min. <button class="btn" onclick="timerStart(${j})">▶</button></span></div>`).join("")}
- ${ts.length>1?`<button class="btn ghost" onclick="timerAll()">▶▶ Alle ${ts.length} starten</button> `:""}
- <div class="row"><span class="mut">Eigener Timer</span><span><input type="text" id="cl" placeholder="Name" style="width:90px;display:inline"> <input type="text" inputmode="decimal" id="cm" placeholder="Min." style="width:56px;display:inline"> <button class="btn ghost" onclick="addTimer($('#cl').value,$('#cm').value)">▶</button></span></div></div>
+ ${ts.map((t,j)=>`<div class="tcard"><b>${esc(t.l)}</b><div class="row" style="margin-top:8px"><button class="rb" onclick="tmAdj(${j},-1)">−</button><span class="tmin">${tmin(j)}<span style="font-size:16px"> Min.</span></span><button class="rb" onclick="tmAdj(${j},1)">+</button><button class="btn big" onclick="timerStart(${j})">▶ Start</button></div></div>`).join("")}
+ ${ts.length>1?`<button class="btn ghost big" style="width:100%" onclick="timerAll()">▶▶ Alle ${ts.length} starten</button>`:""}
+ <div class="tcard"><div class="mut">Eigener Timer</div><div class="row" style="margin-top:6px"><input type="text" id="cl" placeholder="Name" style="flex:1"><input type="text" inputmode="decimal" id="cm" placeholder="Min." style="width:70px"><button class="btn big" onclick="addTimer($('#cl').value,$('#cm').value,cook.id)">▶</button></div></div>
  <div id="tms">${timersHtml()}</div>
- <div class="row" style="margin-top:14px"><button class="btn ghost" ${cook.i?"":"disabled"} onclick="cook.i--;cookRender()">← Zurück</button><button class="btn ghost" onclick="cook.ing=!cook.ing;cookRender()">🥕 Zutaten</button><button class="btn" onclick="${cook.i<n-1?"cook.i++;cookRender()":"cookDone()"}">${cook.i<n-1?"Weiter →":"Fertig 🎉"}</button></div>
+ <div class="row" style="margin-top:14px"><button class="btn ghost big" ${cook.i?"":"disabled"} onclick="cook.i--;cookRender()">← Zurück</button><button class="btn ghost big" onclick="cook.ing=!cook.ing;cookRender()">🥕</button><button class="btn big" onclick="${cook.i<n-1?"cook.i++;cookRender()":"cookDone()"}">${cook.i<n-1?"Weiter →":"Fertig 🎉"}</button></div>
  ${Array.isArray(r.zeiten)?"":`<p><button class="btn ghost" ${cook.busy?"disabled":""} onclick="aiTimes()">${cook.busy?"KI liest …":"✨ Zeiten per KI aus dem Rezept erkennen"}</button></p>`}
  ${cook.ing?`<div class="card" style="margin-top:12px"><ul>${r.zutaten.map(z=>`<li>${z.m!=null?fmt(z.m*k)+" "+esc(z.e)+" ":""}${esc(z.n)}</li>`).join("")}</ul></div>`:""}`}
 /* ---------- Wochenplan ---------- */
