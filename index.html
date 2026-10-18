@@ -78,7 +78,7 @@ const SEED=[{id:1,titel:"Quiche Lorraine – der Klassiker",kat:["Hauptgericht",
  "Ca. 35 Min. im Ofen backen."],
  var:{veg:{titel:"Quiche Lorraine (vegetarisch)",hinweis:"Räuchertofu in etwas Öl knusprig braten; 1 TL geräuchertes Paprikapulver für das Raucharoma.",
   zutaten:null,ersetze:{"Speckwürfel":"Räuchertofu, gewürfelt"}}}}];
-const K="kochbuch-v2",VER="2026-10-18 · Sync-Prüfung 2";
+const K="kochbuch-v2",VER="2026-10-18 · Sync-Prüfung 3";
 let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest",gh:"",ghRepo:"",meta:{},smeta:{},plans:[],tomb:{},catsMeta:{h:"",u:0},syncAt:0,syncSt:"",plan:{n:5,days:[],wish:"",neu:true}},JSON.parse(localStorage.getItem(K)||"{}"));
 const rawSave=()=>localStorage.setItem(K,JSON.stringify(S));
 const save=()=>{rawSave();schedSync()};
@@ -353,10 +353,11 @@ function setSt(t){S.syncSt=t;const e=document.getElementById("syncst");if(e)e.te
 async function gh(method,body){const U="https://api.github.com/repos/"+S.ghRepo+"/contents/kochbuch.json";const r=await fetch(U+(method==="GET"?"?t="+Date.now():""),
  {method,headers:{Authorization:"Bearer "+S.gh,Accept:"application/vnd.github+json",...(body?{"Content-Type":"application/json"}:{})},cache:"no-store",body:body?JSON.stringify(body):undefined});
  if(method==="GET"&&r.status===404)return{data:null,sha:null};
- if(r.status===401)throw new Error("Zugangsschlüssel ungültig oder abgelaufen (401).");
- if(r.status===403||r.status===404)throw new Error("Kein Zugriff auf das Repo ("+r.status+"). Name und Rechte des Schlüssels prüfen.");
+ const msg=async()=>{try{return " GitHub sagt: "+((await r.clone().json()).message||"")}catch(e){return ""}};
+ if(r.status===401)throw new Error("Zugangsschlüssel ungültig oder abgelaufen (401)."+await msg());
+ if(r.status===403||r.status===404)throw new Error("Kein Zugriff auf das Repo ("+r.status+"). Name und Rechte des Schlüssels prüfen (Contents: Read and write, Repo kochbuch-daten)."+await msg());
  if(method==="PUT"&&(r.status===409||r.status===422))return{conflict:true};
- if(!r.ok)throw new Error("GitHub "+r.status);
+ if(!r.ok)throw new Error("GitHub "+r.status+await msg());
  const j=await r.json();if(method!=="GET")return{ok:true};
  let txt;if(j.content)txt=b64d(j.content);else{const rr=await fetch(U+"?t="+Date.now(),{headers:{Authorization:"Bearer "+S.gh,Accept:"application/vnd.github.raw+json"},cache:"no-store"});if(!rr.ok)throw new Error("GitHub "+rr.status);txt=await rr.text()}
  return{data:JSON.parse(txt),sha:j.sha}}
