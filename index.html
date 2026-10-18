@@ -78,7 +78,7 @@ const SEED=[{id:1,titel:"Quiche Lorraine – der Klassiker",kat:["Hauptgericht",
  "Ca. 35 Min. im Ofen backen."],
  var:{veg:{titel:"Quiche Lorraine (vegetarisch)",hinweis:"Räuchertofu in etwas Öl knusprig braten; 1 TL geräuchertes Paprikapulver für das Raucharoma.",
   zutaten:null,ersetze:{"Speckwürfel":"Räuchertofu, gewürfelt"}}}}];
-const K="kochbuch-v2",VER="2026-10-18 · Timer 4";
+const K="kochbuch-v2",VER="2026-10-18 · Timer 5";
 let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest",gh:"",ghRepo:"",meta:{},tomb:{},catsMeta:{h:"",u:0},syncAt:0,syncSt:"",plan:{n:5,days:[],wish:"",neu:true}},JSON.parse(localStorage.getItem(K)||"{}"));
 const rawSave=()=>localStorage.setItem(K,JSON.stringify(S));
 const save=()=>{rawSave();schedSync()};
@@ -100,7 +100,7 @@ async function ai(content,json=true){
   body:JSON.stringify({model:S.model,temperature:.3,messages:[{role:"user",content}],...(json?{response_format:{type:"json_object"}}:{})})});
  if(!r.ok){const t=await r.text();throw new Error("Mistral "+r.status+": "+t.slice(0,200))}
  const j=await r.json();return json?JSON.parse(j.choices[0].message.content):j.choices[0].message.content}
-const SCHEMA=`Antworte NUR als JSON: {"titel":string,"kat":[string] (z.B. Hauptgericht, Suppe, Salat, Dessert, Backen, Frühstück, Beilage),"por":number,"aktiv":number (Min),"gesamt":number (Min),"naehr":string,"zutaten":[{"g":Gruppenname oder "","m":number oder null,"e":Einheit oder "","n":Name}],"schritte":[string],"bild":{"abschnitt":number,"x":number,"y":number,"w":number,"h":number} oder null,"zeiten":[[{"l":string,"min":number}]]}. zeiten hat pro Schritt eine Liste (gleich viele Einträge wie schritte, [] wenn nichts abzuwarten ist) mit Warte-/Garzeiten (Ofen, Kochen, Braten, Ruhen, Kühlen, Gehen lassen): l = kurze Bezeichnung wie "Ofen: Quiche backen", min = Minuten (bei Zeitspannen die obere Grenze, Stunden umrechnen). Mengen als Zahl, Einheit getrennt (g, ml, EL, TL, Stk …). Prisen/„etwas“ -> m:null und in den Namen schreiben.`;
+const SCHEMA=`Antworte NUR als JSON: {"titel":string,"kat":[string] (z.B. Hauptgericht, Suppe, Salat, Dessert, Backen, Frühstück, Beilage),"por":number,"aktiv":number (Min),"gesamt":number (Min),"naehr":string,"zutaten":[{"g":Gruppenname oder "","m":number oder null,"e":Einheit oder "","n":Name}],"schritte":[string],"bild":{"abschnitt":number,"x":number,"y":number,"w":number,"h":number} oder null,"zeiten":[[{"l":string,"min":number}]]}. zeiten hat pro Schritt eine Liste (gleich viele Einträge wie schritte, [] wenn nichts abzuwarten ist) mit Warte-/Garzeiten (Ofen, Kochen, Braten, Ruhen, Kühlen, Gehen lassen): l = kurzer, prägnanter Name aus 1 bis 3 Wörtern (Tätigkeit, ggf. mit Zutat), z. B. "Garnelen anbraten", "Backen", "Teig kühlen", "Reis quellen lassen"; ohne Zeitangabe und ohne Präfix wie "Ofen:", min = Minuten (bei Zeitspannen die obere Grenze, Stunden umrechnen). Mengen als Zahl, Einheit getrennt (g, ml, EL, TL, Stk …). Prisen/„etwas“ -> m:null und in den Namen schreiben.`;
 function loadImg(f){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(f)})}
 async function slices(f){ // lange Screenshots verkleinern und in Abschnitte schneiden
  const im=await loadImg(f),W=Math.min(im.height>im.width*2.5?800:1400,im.width),sc=W/im.width,H=Math.round(im.height*sc),SH=1600,out=[];
@@ -270,7 +270,9 @@ function timerView(){return `<div class="card"><b class="head">⏱ Timer</b>
  <div class="row"><input type="text" id="tl" placeholder="Name (z. B. Nudeln)" style="flex:1"><input type="text" inputmode="decimal" id="tmn" placeholder="Min." style="width:70px"><button class="btn" onclick="addTimer($('#tl').value,$('#tmn').value)">▶</button></div></div>
  <div id="tview"></div>`}
 function stepTimers(r,i){const z=r.zeiten&&r.zeiten[i];if(Array.isArray(z))return z.filter(x=>x&&x.min>0);
- const out=[],re=/(\d+)(?:\s*[–-]\s*(\d+))?\s*(Min\.?|Minuten|Std\.?|Stunden?)/gi;let m;while((m=re.exec(r.schritte[i]))){out.push({l:m[0],min:+(m[2]||m[1])*(/^S/i.test(m[3])?60:1)})}return out}
+ const out=[],re=/(\d+)(?:\s*[–-]\s*(\d+))?\s*(Min\.?|Minuten|Std\.?|Stunden?)/gi;let m;while((m=re.exec(r.schritte[i]))){out.push({l:stepName(r.schritte[i],i),min:+(m[2]||m[1])*(/^S/i.test(m[3])?60:1)})}return out}
+const NAMES=[[/anbrat|anbrät/i,"Anbraten"],[/brat|brät/i,"Braten"],[/köchel/i,"Köcheln"],[/schmor/i,"Schmoren"],[/dünst/i,"Dünsten"],[/rösten/i,"Rösten"],[/grill/i,"Grillen"],[/marinier/i,"Marinieren"],[/einweich|quellen/i,"Einweichen"],[/gehen lassen|aufgehen/i,"Gehen lassen"],[/ziehen/i,"Ziehen lassen"],[/ruhen/i,"Ruhen lassen"],[/kalt stellen|kühl/i,"Kühlen"],[/backen|backofen|ofen/i,"Backen"],[/kochen|garen|gar /i,"Kochen"]];
+const stepName=(s,i)=>(NAMES.find(([re])=>re.test(s))||[0,"Schritt "+(i+1)])[1];
 const tsave=()=>{try{localStorage.setItem("kochbuch-timers",JSON.stringify(timers))}catch(e){}};
 try{timers=JSON.parse(localStorage.getItem("kochbuch-timers")||"[]")}catch(e){}
 function addTimer(label,min,rid){min=parseFloat(String(min).replace(",","."));if(!(min>0))return toast("Minuten eintragen");const r=rid&&S.rez.find(x=>x.id===rid);timers.push({end:Date.now()+min*60000,label:label||"Timer",done:false,rid:rid||null,rt:r?r.titel:""});tsave();cookRender()}
@@ -291,7 +293,7 @@ function tick(){timers.forEach(t=>{if(!t.done&&Date.now()>=t.end){t.done=true;ts
  if(!b){b=document.createElement("div");b.id="tbar";b.onclick=e=>{if(e.target.closest("button"))return;tab="timer";cur=null;render()};document.body.appendChild(b)}b.innerHTML=timersHtml()}
 setInterval(tick,1000);
 async function timesFor(id,variantKey){const r0=S.rez.find(x=>x.id===id),useV=variantKey&&variantKey!=="orig"&&r0.var?.[variantKey]?.schritte,steps=useV?r0.var[variantKey].schritte:r0.schritte;
- const v=await ai("Extrahiere aus diesen Rezeptschritten alle Warte- und Garzeiten (Ofen, Kochen, Braten, Ruhen, Kühlen, Gehen lassen). "+JSON.stringify(steps)+' Antworte NUR als JSON: {"zeiten":[[{"l":string,"min":number}]]} mit genau '+steps.length+' Listen (pro Schritt eine, [] wenn nichts). l = kurze Bezeichnung wie "Ofen: Quiche backen", min = Minuten (obere Grenze bei Spannen).');
+ const v=await ai("Extrahiere aus diesen Rezeptschritten alle Warte- und Garzeiten (Ofen, Kochen, Braten, Ruhen, Kühlen, Gehen lassen). "+JSON.stringify(steps)+' Antworte NUR als JSON: {"zeiten":[[{"l":string,"min":number}]]} mit genau '+steps.length+' Listen (pro Schritt eine, [] wenn nichts). l = kurzer, prägnanter Name aus 1 bis 3 Wörtern (Tätigkeit, ggf. mit Zutat), z. B. "Garnelen anbraten", "Backen", "Teig kühlen", "Reis quellen lassen"; ohne Zeitangabe und ohne Präfix wie "Ofen:", min = Minuten (obere Grenze bei Spannen).');
  const z=(v.zeiten||[]).slice(0,steps.length);while(z.length<steps.length)z.push([]);if(useV)r0.var[variantKey].zeiten=z;else r0.zeiten=z;save()}
 async function aiTimes(){cook.busy=true;cookRender();try{await timesFor(cook.id,sel)}catch(e){if(e.message!=="nokey")alert(e.message)}cook.busy=false;cookRender()}
 async function aiTimesBtn(id){if(busy)return;busy=true;toast("KI liest die Zeiten …");try{await timesFor(id,sel);const q=current(S.rez.find(x=>x.id===id)),n=(q.zeiten||[]).reduce((a,z)=>a+(z||[]).length,0);toast(n?n+" Zeit(en) gefunden. Tippe am Schritt auf ⏱ oder nutze den Kochmodus.":"Keine Warte- oder Garzeiten im Rezept gefunden.")}catch(e){if(e.message!=="nokey")alert(e.message)}busy=false;render()}
