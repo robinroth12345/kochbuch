@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Rothes Kochbuch</title>
+<title>Kochbuch der Roth's</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#c2512f">
 <link rel="icon" href="icon-192.png">
@@ -44,7 +44,7 @@ textarea{min-height:110px}
 #tbar{position:fixed;top:0;left:0;right:0;z-index:15;padding:6px 12px;background:var(--bg);box-shadow:0 2px 8px #0003}#tbar .tcard{margin:4px 0;padding:8px 12px}#tbar .tmin{font-size:22px}
 nav button{font-size:11px!important;padding:10px 0!important}#tbar{cursor:pointer}
 </style></head><body>
-<header><h1>🍳 Rothes Kochbuch</h1></header>
+<header><h1>🍔 Kochbuch der Roth's</h1></header>
 <div id="chips" class="chips"></div>
 <main id="main"></main>
 <nav>
@@ -78,8 +78,8 @@ const SEED=[{id:1,titel:"Quiche Lorraine – der Klassiker",kat:["Hauptgericht",
  "Ca. 35 Min. im Ofen backen."],
  var:{veg:{titel:"Quiche Lorraine (vegetarisch)",hinweis:"Räuchertofu in etwas Öl knusprig braten; 1 TL geräuchertes Paprikapulver für das Raucharoma.",
   zutaten:null,ersetze:{"Speckwürfel":"Räuchertofu, gewürfelt"}}}}];
-const K="kochbuch-v2",VER="2026-10-18 · Einkauf-Sync";
-let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest",gh:"",ghRepo:"",meta:{},smeta:{},tomb:{},catsMeta:{h:"",u:0},syncAt:0,syncSt:"",plan:{n:5,days:[],wish:"",neu:true}},JSON.parse(localStorage.getItem(K)||"{}"));
+const K="kochbuch-v2",VER="2026-10-18 · Pläne";
+let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest",gh:"",ghRepo:"",meta:{},smeta:{},plans:[],tomb:{},catsMeta:{h:"",u:0},syncAt:0,syncSt:"",plan:{n:5,days:[],wish:"",neu:true}},JSON.parse(localStorage.getItem(K)||"{}"));
 const rawSave=()=>localStorage.setItem(K,JSON.stringify(S));
 const save=()=>{rawSave();schedSync()};
 const DEFCATS=["Hauptgericht","Suppe","Salat","Beilage","Dessert","Backen","Frühstück","Snack","Getränk"];
@@ -194,9 +194,10 @@ function moreView(){return `<div class="card"><b class="head">🎨 Layout</b><di
  <button class="btn" onclick="S.key=$('#k').value.trim();S.model=$('#mo').value.trim()||'mistral-small-latest';save();toast('Gespeichert')">Speichern</button> <button class="btn ghost" onclick="testKey()">Testen</button></div>
  <div class="card"><b class="head">🔄 Gemeinsam synchronisieren</b><p class="mut">Rezepte, Kategorien und die Einkaufsliste werden in einem <b>privaten</b> GitHub-Repo abgelegt und zwischen euren Handys abgeglichen. Beide tragen dasselbe Repo und denselben Zugangsschlüssel ein. Der Schlüssel bleibt nur auf dem Gerät und ist nicht in der Sicherungsdatei.</p>
  <input type="text" id="ghr" placeholder="Repo, z. B. robinroth12345/kochbuch-daten" value="${esc(S.ghRepo)}" autocomplete="off"><input type="password" id="ght" placeholder="Zugangsschlüssel (GitHub-Token)" value="${esc(S.gh)}" autocomplete="off">
- <button class="btn" onclick="S.ghRepo=$('#ghr').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'');S.gh=$('#ght').value.trim();rawSave();sync(true)">Speichern & synchronisieren</button>
+ <button class="btn" onclick="saveSync()">Speichern & synchronisieren</button>
+ <div class="note" style="color:var(--acc)">${S.gh&&S.ghRepo?"✓ Gespeichert: "+esc(S.ghRepo)+", Schlüssel hinterlegt (…"+esc(S.gh.slice(-4))+")":"Noch nicht eingerichtet"}</div>
  <div class="note" id="syncst">${esc(S.syncSt||"")}${S.syncAt?" · zuletzt "+new Date(S.syncAt).toLocaleString("de-DE"):""}</div></div>
- <p class="note" style="text-align:center">Rothes Kochbuch · Version ${VER}</p><div class="card"><b class="head">💾 Sicherung</b><p class="mut">Die Rezepte liegen nur in diesem Browser. Regelmäßig exportieren und die Datei z. B. in Box ablegen.</p><button class="btn" onclick="exp()">Exportieren</button> <label class="btn ghost" style="display:inline-block">Importieren<input type="file" accept=".json" hidden onchange="imp(this.files[0])"></label></div>`}
+ <p class="note" style="text-align:center">Kochbuch der Roth's · Version ${VER}</p><div class="card"><b class="head">💾 Sicherung</b><p class="mut">Die Rezepte liegen nur in diesem Browser. Regelmäßig exportieren und die Datei z. B. in Box ablegen.</p><button class="btn" onclick="exp()">Exportieren</button> <label class="btn ghost" style="display:inline-block">Importieren<input type="file" accept=".json" hidden onchange="imp(this.files[0])"></label></div>`}
 async function testKey(){S.key=$("#k").value.trim();S.model=$("#mo").value.trim()||S.model;save();try{await ai("Sag nur: ok",false);toast("Verbindung klappt ✓")}catch(e){if(e.message!=="nokey")alert(e.message)}}
 
 /* ---------- Aktionen ---------- */
@@ -226,7 +227,7 @@ function finde(){const q=$("#q").value.toLowerCase().split(",").map(s=>s.trim())
  $("#res").innerHTML=!q.length?"":S.rez.map(r=>{const ns=r.zutaten.map(z=>z.n.toLowerCase()),hit=ns.filter(n=>q.some(x=>n.includes(x))).length;return{r,hit,n:ns.length}})
  .sort((a,b)=>b.hit/b.n-a.hit/a.n).map(x=>`<div class="card" onclick="tab='list';cur=${x.r.id};sel='orig';render()"><b>${esc(x.r.titel)}</b><div class="mut">${x.hit} von ${x.n} Zutaten vorhanden</div></div>`).join("")}
 function surprise(){if(!S.rez.length)return;const r=S.rez[Math.floor(Math.random()*S.rez.length)];$("#sur").innerHTML=`Wie wäre es mit <a href="#" onclick="tab='list';cur=${r.id};sel='orig';render();return false">${esc(r.titel)}</a>?`}
-function exp(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({...S,key:"",gh:""},null,1)],{type:"application/json"}));a.download="rothes-kochbuch-backup.json";a.click()}
+function exp(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({...S,key:"",gh:""},null,1)],{type:"application/json"}));a.download="kochbuch-backup.json";a.click()}
 function imp(f){f.text().then(t=>{const d=JSON.parse(t);S={...S,...d,key:S.key,gh:S.gh,ghRepo:S.ghRepo};ensureCats();save();applyTheme();render();toast("Wiederhergestellt")})}
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;cur=null;render();if(tab==="shop"&&S.gh)sync(false)});
 /* ---------- Fotos ---------- */
@@ -319,7 +320,17 @@ function weekView(){const p=S.plan;return `<div class="card"><b class="head">�
  <label style="display:block;margin:6px 0"><input type="checkbox" ${p.neu?"checked":""} onchange="S.plan.neu=this.checked;save()"> KI darf neue Ideen ergänzen</label>
  <button class="btn" onclick="planAI()">✨ Vorschlag von der KI</button> <button class="btn ghost" onclick="planLocal()">🎲 Aus meinem Buch mischen</button><div id="wst" class="note"></div></div>
  ${p.days.map((d,i)=>{const r=d.rid&&S.rez.find(x=>x.id===d.rid);return `<div class="card"><div class="mut">${TAGE[i]}</div><div class="row"><b class="head">${r?`<a href="#" style="color:inherit" onclick="tab='list';cur=${r.id};sel='orig';render();return false">${esc(r.titel)}</a>`:d.idee?esc(d.idee)+" <span class=mut>(Idee)</span>":"– frei –"}</b><span><button class="chip" onclick="planReroll(${i})">🎲</button> <button class="chip" onclick="S.plan.days[${i}]={};save();render()">✕</button></span></div>${d.grund?`<div class="mut">${esc(d.grund)}</div>`:""}${d.idee&&!r?`<button class="btn ghost" onclick="planGen(${i})">✨ Rezept dazu erzeugen</button>`:""}</div>`}).join("")}
- ${p.days.some(d=>d.rid)?`<p><button class="btn" onclick="planShop()">🛒 Zutaten der Woche auf die Einkaufsliste</button></p>`:""}`}
+ ${p.days.some(d=>d.rid)?`<p><button class="btn" onclick="planShop()">🛒 Zutaten der Woche auf die Einkaufsliste</button></p>`:""}
+ ${p.days.some(d=>d.rid||d.idee)?`<div class="card"><b class="head">💾 Plan speichern</b><div class="row" style="margin-top:6px"><input type="text" id="pn" placeholder="Name, z. B. KW ${isoWeek(new Date())}" style="flex:1"><button class="btn" onclick="planSave()">Speichern</button></div></div>`:""}
+ ${S.plans.length?`<h3>Gespeicherte Pläne</h3>`+S.plans.map(q=>`<div class="card"><div class="row"><b class="head">${esc(q.name)}</b><span class="mut">${new Date(q.saved).toLocaleDateString("de-DE")}</span></div><ul>${q.days.map((d,i)=>`<li><span class="mut">${TAGE[i].slice(0,2)}</span> ${d.rid&&S.rez.some(r=>r.id===d.rid)?`<a href="#" style="color:inherit" onclick="tab='list';cur=${d.rid};sel='orig';render();return false">${esc(d.titel||"")}</a>`:esc(d.titel||"– frei –")}</li>`).join("")}</ul><button class="btn ghost" onclick="planLoad(${q.id})">Laden</button> <button class="btn ghost" onclick="planShopSaved(${q.id})">🛒 Einkauf</button> <button class="btn ghost" onclick="planDel(${q.id})">🗑</button></div>`).join(""):""}`}
+const isoWeek=d=>{d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=d.getUTCDay()||7;d.setUTCDate(d.getUTCDate()+4-n);const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));return Math.ceil(((d-y)/864e5+1)/7)};
+function planSave(){const nm=($("#pn").value||"").trim()||"KW "+isoWeek(new Date());
+ const days=S.plan.days.map(d=>({...d,titel:d.rid?S.rez.find(x=>x.id===d.rid)?.titel:d.idee}));
+ const ex=S.plans.findIndex(p=>p.name===nm),p={id:Date.now(),name:nm,n:S.plan.n,days,saved:Date.now()};
+ if(ex>=0)S.plans[ex]=p;else S.plans.unshift(p);save();toast("Plan „"+nm+"“ gespeichert ✓");render()}
+function planLoad(id){const p=S.plans.find(x=>x.id===id);S.plan.days=p.days.map(({titel,...d})=>d);S.plan.n=p.n;save();toast("Plan geladen");render();scrollTo(0,0)}
+function planDel(id){if(confirm("Gespeicherten Plan löschen?")){S.plans=S.plans.filter(x=>x.id!==id);save();render()}}
+function planShopSaved(id){const p=S.plans.find(x=>x.id===id);p.days.filter(d=>d.rid&&S.rez.some(r=>r.id===d.rid)).forEach(d=>addShop(d.rid,false));save();toast("Zutaten hinzugefügt");tab="shop";render()}
 function planPick(n,ex){const pool=S.rez.filter(r=>!ex.includes(r.id)).sort(()=>Math.random()-.5),used={},out=[];
  while(out.length<n&&pool.length){let b=0,bs=1e9;pool.forEach((r,i)=>{const s=(r.kat||[]).reduce((a,c)=>a+(used[c]||0),0)+Math.random();if(s<bs){bs=s;b=i}});
   const r=pool.splice(b,1)[0];(r.kat||[]).forEach(c=>used[c]=(used[c]||0)+1);out.push(r)}return out}
@@ -372,9 +383,11 @@ function merge(rem){rem=rem||{rez:[],cats:null,catsU:0,tomb:{}};
   if(l&&lu>=ru){sout.push(l);smeta[id]={h:S.smeta[id].h,u:lu}}else{const{upd,...rr}=r;sout.push(rr);smeta[id]={h:hsh(JSON.stringify(rr)),u:ru}}});
  sout.sort((a,b)=>a.id<b.id?-1:1);
  return{out,meta,tomb,cats,catsU,sout,smeta}}
+function saveSync(){S.ghRepo=$("#ghr").value.trim().replace(/^https?:\/\/github\.com\//,"").replace(/\.git$/,"").replace(/\/$/,"");S.gh=$("#ght").value.trim();rawSave();
+ if(!S.ghRepo||!S.gh)return toast("Bitte Repo und Schlüssel eintragen");render();toast("Gespeichert ✓ synchronisiere …");setSt("Synchronisiere …");sync(true)}
 async function sync(manual){
  if(!S.gh||!S.ghRepo){if(manual)toast("Repo und Schlüssel eintragen");return}
- if(syncing){pendingSync=true;return}syncing=true;setSt("Synchronisiere …");
+ if(syncing){pendingSync=true;if(manual)toast("Synchronisierung läuft schon …");return}syncing=true;setSt("Synchronisiere …");
  try{let changed=false;
   for(let t=0;t<3;t++){const{data,sha}=await gh("GET");computeMeta();const m=merge(data);
    const before=JSON.stringify([S.rez,S.cats,S.shop]);
@@ -387,7 +400,7 @@ async function sync(manual){
    const res=await gh("PUT",{message:"Sync "+new Date().toISOString(),content:b64e(JSON.stringify(payload)),...(sha?{sha}:{})});
    if(!res.conflict)break;if(t===2)throw new Error("Gleichzeitige Änderung, bitte nochmal versuchen.")}
   S.syncAt=Date.now();S.syncSt="Synchronisiert ✓";rawSave();
-  if(manual)toast("Synchronisiert ✓");
+  if(manual)toast("✓ Gespeichert und synchronisiert: "+S.rez.length+" Rezepte, "+S.shop.filter(x=>!x.d).length+" Einkaufseinträge offen");
   if(changed&&!document.activeElement?.matches?.("input,textarea"))render();else setSt(S.syncSt)
  }catch(e){S.syncSt="Fehler: "+e.message;rawSave();if(manual)alert(S.syncSt);setSt(S.syncSt)}
  syncing=false;if(pendingSync){pendingSync=false;schedSync()}}
