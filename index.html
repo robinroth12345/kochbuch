@@ -41,7 +41,8 @@ textarea{min-height:110px}
 .thumb{width:62px;height:62px;border-radius:calc(var(--r) - 4px);object-fit:cover;flex:none}
 #cook{position:fixed;inset:0;z-index:20;background:var(--bg);padding:16px;overflow:auto}
 .cs{font-size:22px;line-height:1.5;margin:16px 0}
-.tm{margin:8px 0;padding:8px 12px;border:1px solid var(--acc);border-radius:10px}
+.tm{margin:8px 0;padding:8px 12px;border:1px solid var(--acc);border-radius:10px;background:var(--card)}
+#tbar{position:fixed;top:0;left:0;right:0;z-index:15;padding:6px 12px;background:var(--bg);box-shadow:0 2px 8px #0003}#tbar .tm{margin:4px 0}
 nav button{font-size:12px!important}
 </style></head><body>
 <header><h1>🍳 Rothes Kochbuch</h1></header>
@@ -100,7 +101,7 @@ async function ai(content,json=true){
   body:JSON.stringify({model:S.model,temperature:.3,messages:[{role:"user",content}],...(json?{response_format:{type:"json_object"}}:{})})});
  if(!r.ok){const t=await r.text();throw new Error("Mistral "+r.status+": "+t.slice(0,200))}
  const j=await r.json();return json?JSON.parse(j.choices[0].message.content):j.choices[0].message.content}
-const SCHEMA=`Antworte NUR als JSON: {"titel":string,"kat":[string] (z.B. Hauptgericht, Suppe, Salat, Dessert, Backen, Frühstück, Beilage),"por":number,"aktiv":number (Min),"gesamt":number (Min),"naehr":string,"zutaten":[{"g":Gruppenname oder "","m":number oder null,"e":Einheit oder "","n":Name}],"schritte":[string],"bild":{"abschnitt":number,"x":number,"y":number,"w":number,"h":number} oder null}. Mengen als Zahl, Einheit getrennt (g, ml, EL, TL, Stk …). Prisen/„etwas“ -> m:null und in den Namen schreiben.`;
+const SCHEMA=`Antworte NUR als JSON: {"titel":string,"kat":[string] (z.B. Hauptgericht, Suppe, Salat, Dessert, Backen, Frühstück, Beilage),"por":number,"aktiv":number (Min),"gesamt":number (Min),"naehr":string,"zutaten":[{"g":Gruppenname oder "","m":number oder null,"e":Einheit oder "","n":Name}],"schritte":[string],"bild":{"abschnitt":number,"x":number,"y":number,"w":number,"h":number} oder null,"zeiten":[[{"l":string,"min":number}]]}. zeiten hat pro Schritt eine Liste (gleich viele Einträge wie schritte, [] wenn nichts abzuwarten ist) mit Warte-/Garzeiten (Ofen, Kochen, Braten, Ruhen, Kühlen, Gehen lassen): l = kurze Bezeichnung wie "Ofen: Quiche backen", min = Minuten (bei Zeitspannen die obere Grenze, Stunden umrechnen). Mengen als Zahl, Einheit getrennt (g, ml, EL, TL, Stk …). Prisen/„etwas“ -> m:null und in den Namen schreiben.`;
 function loadImg(f){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(f)})}
 async function slices(f){ // lange Screenshots verkleinern und in Abschnitte schneiden
  const im=await loadImg(f),W=Math.min(800,im.width),sc=W/im.width,H=Math.round(im.height*sc),SH=1600,out=[];
@@ -111,10 +112,10 @@ async function importFiles(files){
  if(busy||!files.length)return;busy=true;$("#imp").classList.add("spin");$("#impst").textContent="Bild wird gelesen …";
  try{for(const f of files){const sl=await slices(f);
   $("#impst").textContent="KI liest Rezept ("+sl.length+" Abschnitte) …";
-  const r=await ai([{type:"text",text:"Die Bilder sind aufeinanderfolgende Abschnitte EINES Screenshots einer Rezeptseite (App/Website). Ignoriere Werbung, Kommentare und Menüs. Übernimm das Rezept auf Deutsch, Mengen so wie angezeigt (Portionszahl der Seite). Falls Nährwerte angezeigt werden, schreibe sie in naehr. Für bild: Rahmen als Anteile 0 bis 1 relativ zum jeweiligen Abschnitt (abschnitt 0 = erstes Bild) um das größte Foto des fertigen Gerichts, ohne Werbung; null, wenn keins sichtbar ist. "+SCHEMA},...sl.map(u=>({type:"image_url",image_url:u}))]);
+  const r=await ai([{type:"text",text:"Die Bilder sind aufeinanderfolgende Abschnitte EINES Screenshots einer Rezeptseite (App/Website). Ignoriere Werbung, Kommentare und Menüs. Übernimm das Rezept auf Deutsch, Mengen so wie angezeigt (Portionszahl der Seite). Falls Nährwerte angezeigt werden, schreibe sie in naehr. Vorhandene Kategorien: "+S.cats.join(", ")+". Wähle 1 bis 2 passende; nur wenn keine passt, schlage eine neue vor. Für bild: Rahmen als Anteile 0 bis 1 relativ zum jeweiligen Abschnitt (abschnitt 0 = erstes Bild) um das größte Foto des fertigen Gerichts, ohne Werbung; null, wenn keins sichtbar ist. "+SCHEMA},...sl.map(u=>({type:"image_url",image_url:u}))]);
   const bb=r.bild;delete r.bild;try{if(bb)r.img=await cropImg(sl,bb)}catch(e){}
   r.id=Date.now()+Math.floor(Math.random()*999);r.var={};r.quelle="Screenshot-Import";r.kat=normCats(r.kat?.length?r.kat:["Hauptgericht"]);S.rez.unshift(r);save();toast("Importiert: "+r.titel)}
-  tab="list";kat="Alle";cur=S.rez[0].id;sel="orig"}catch(e){if(e.message!=="nokey")alert("Import fehlgeschlagen: "+e.message)}
+  tab="list";kat="Alle";cur=S.rez[0].id;sel="orig";editCat=cur}catch(e){if(e.message!=="nokey")alert("Import fehlgeschlagen: "+e.message)}
  busy=false;render()}
 async function makeVariant(id,typ){const r=S.rez.find(x=>x.id===id);if(busy)return;busy=true;render();
  const anw=typ==="veg"?"Wandle das Rezept in eine vollwertige VEGETARISCHE Variante um (Fleisch/Fisch sinnvoll ersetzen, Würzung anpassen).":"Wandle das Rezept in eine "+STILE[typ].replace(/^\S+\s/,"")+" Variante um (typische Gewürze, Zutaten und Techniken).";
@@ -128,7 +129,7 @@ async function ideas(mode){const q=($("#q")?.value||"").trim();if(busy)return;if
   const v=await ai(mode==="zut"?"Ich habe diese Zutaten: "+q+". Schlage 5 passende Gerichte vor (Grundzutaten wie Salz, Öl, Mehl dürfen fehlen)."+J:"Überrasche mich mit 3 Gerichten, die zu meinem Geschmack passen (meine Rezepte: "+own+"). Gern andere Küche als sonst."+J);
   window.IDEAS=v.ideen||[];$("#ideas").innerHTML=IDEAS.map((x,i)=>`<div class="card"><b>${esc(x.titel)}</b><div class="mut">${esc(x.satz)}</div><button class="btn ghost" onclick="genIdea(${i})">✨ Als Rezept speichern</button></div>`).join("")}
  catch(e){$("#ideas").innerHTML="";if(e.message!=="nokey")alert(e.message)}busy=false}
-async function generateRecipe(t){const r=await ai('Erzeuge ein vollständiges, alltagstaugliches Rezept für "'+t+'" für 4 Portionen. Setze bild auf null. '+SCHEMA);
+async function generateRecipe(t){const r=await ai('Erzeuge ein vollständiges, alltagstaugliches Rezept für "'+t+'" für 4 Portionen. Setze bild auf null. Vorhandene Kategorien: '+S.cats.join(', ')+' (passende wählen, sonst neue). '+SCHEMA);
  delete r.bild;r.id=Date.now()+Math.floor(Math.random()*999);r.var={};r.quelle="KI-Idee";r.kat=normCats(r.kat?.length?r.kat:["Hauptgericht"]);S.rez.unshift(r);save();return r}
 async function genIdea(i){if(busy)return;busy=true;toast("Rezept wird erstellt …");
  try{const r=await generateRecipe(IDEAS[i].titel);cur=r.id;sel="orig";tab="list"}catch(e){if(e.message!=="nokey")alert("Fehlgeschlagen: "+e.message)}busy=false;render()}
@@ -136,7 +137,7 @@ async function genIdea(i){if(busy)return;busy=true;toast("Rezept wird erstellt �
 /* ---------- Ansichten ---------- */
 function current(r){if(sel==="orig"||!r.var?.[sel])return r;const v=r.var[sel];
  const z=v.zutaten||r.zutaten.map(z=>({...z,n:v.ersetze?.[z.n]||z.n}));
- return {...r,titel:v.titel||r.titel,zutaten:z,schritte:v.schritte||r.schritte,hinweis:v.hinweis}}
+ return {...r,titel:v.titel||r.titel,zutaten:z,schritte:v.schritte||r.schritte,zeiten:v.schritte?v.zeiten:r.zeiten,hinweis:v.hinweis}}
 function render(){
  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
  const used=new Set(S.rez.flatMap(r=>r.kat||[])),cats=["Alle","★ Favoriten",...S.cats.filter(c=>used.has(c)),...(S.rez.some(r=>!(r.kat||[]).length)?["Ohne Kategorie"]:[])];
@@ -244,19 +245,38 @@ let cook=null,timers=[],wl=null;
 async function cookStart(id){cook={id,i:0,ing:false};try{wl=await navigator.wakeLock?.request("screen")}catch(e){}cookRender()}
 function cookEnd(){cook=null;try{wl?.release()}catch(e){}wl=null;cookRender()}
 function cookDone(){const r=S.rez.find(x=>x.id===cook.id);r.cooked=[...(r.cooked||[]),Date.now()];save();cookEnd();toast("Guten Appetit! 🍽");render()}
-function stepTimes(s){const out=[],re=/(\d+)(?:\s*[–-]\s*(\d+))?\s*(Min\.?|Minuten|Std\.?|Stunden?)/gi;let m;while((m=re.exec(s))){out.push({sec:+(m[2]||m[1])*(/^S/i.test(m[3])?3600:60),t:m[0]})}return out}
-function timerStart(j){const t=stepTimes(current(S.rez.find(x=>x.id===cook.id)).schritte[cook.i])[j];timers.push({end:Date.now()+t.sec*1000,label:t.t,done:false});cookRender()}
-const mmss=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
-function timersHtml(){return timers.map((t,i)=>`<div class="tm">⏱ ${esc(t.label)}: <b>${t.done?"⏰ abgelaufen":mmss(Math.max(0,Math.round((t.end-Date.now())/1000)))}</b> <button class="chip" onclick="timers.splice(${i},1);cookRender()">✕</button></div>`).join("")}
+function stepTimers(r,i){const z=r.zeiten&&r.zeiten[i];if(Array.isArray(z))return z.filter(x=>x&&x.min>0);
+ const out=[],re=/(\d+)(?:\s*[–-]\s*(\d+))?\s*(Min\.?|Minuten|Std\.?|Stunden?)/gi;let m;while((m=re.exec(r.schritte[i]))){out.push({l:m[0],min:+(m[2]||m[1])*(/^S/i.test(m[3])?60:1)})}return out}
+const tsave=()=>{try{localStorage.setItem("kochbuch-timers",JSON.stringify(timers))}catch(e){}};
+try{timers=JSON.parse(localStorage.getItem("kochbuch-timers")||"[]")}catch(e){}
+function addTimer(label,min){min=parseFloat(String(min).replace(",","."));if(!(min>0))return toast("Minuten eintragen");timers.push({end:Date.now()+min*60000,label:label||"Timer",done:false});tsave();cookRender()}
+function timerStart(j){const t=stepTimers(cur_(),cook.i)[j];addTimer(t.l,$("#tmin"+j).value)}
+function timerAll(){stepTimers(cur_(),cook.i).forEach((t,j)=>{const m=parseFloat(String($("#tmin"+j).value).replace(",","."));if(m>0)timers.push({end:Date.now()+m*60000,label:t.l,done:false})});tsave();cookRender()}
+const cur_=()=>current(S.rez.find(x=>x.id===cook.id));
+const mmss=s=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return(h?h+":"+String(m).padStart(2,"0"):m)+":"+String(s%60).padStart(2,"0")};
+function timersHtml(){return timers.map((t,i)=>`<div class="tm row"><span>⏱ ${esc(t.label)}: <b>${t.done?"⏰ abgelaufen":mmss(Math.max(0,Math.round((t.end-Date.now())/1000)))}</b></span><span>${t.done?"":`<button class="chip" onclick="timers[${i}].end+=300000;tsave();cookRender()">+5</button> `}<button class="chip" onclick="timers.splice(${i},1);tsave();cookRender()">✕</button></span></div>`).join("")}
 function beep(){try{const a=new(window.AudioContext||window.webkitAudioContext)();[0,.35,.7].forEach(d=>{const o=a.createOscillator();o.frequency.value=880;o.connect(a.destination);o.start(a.currentTime+d);o.stop(a.currentTime+d+.2)})}catch(e){}try{navigator.vibrate?.([300,150,300,150,300])}catch(e){}}
-setInterval(()=>{timers.forEach(t=>{if(!t.done&&Date.now()>=t.end){t.done=true;beep();toast("⏰ "+t.label+" ist um!")}});const e=document.getElementById("tms");if(cook&&e)e.innerHTML=timersHtml()},1000);
-function cookRender(){let o=document.getElementById("cook");if(!cook){o&&o.remove();return}
+function tick(){timers.forEach(t=>{if(!t.done&&Date.now()>=t.end){t.done=true;tsave();beep();toast("⏰ "+t.label+" ist um!")}});
+ const e=document.getElementById("tms");if(cook&&e)e.innerHTML=timersHtml();
+ let b=document.getElementById("tbar");if(!timers.length||cook){b&&b.remove();return}
+ if(!b){b=document.createElement("div");b.id="tbar";document.body.appendChild(b)}b.innerHTML=timersHtml()}
+setInterval(tick,1000);
+async function aiTimes(){const r0=S.rez.find(x=>x.id===cook.id),r=current(r0);cook.busy=true;cookRender();
+ try{const v=await ai("Extrahiere aus diesen Rezeptschritten alle Warte- und Garzeiten (Ofen, Kochen, Braten, Ruhen, Kühlen, Gehen lassen). "+JSON.stringify(r.schritte)+' Antworte NUR als JSON: {"zeiten":[[{"l":string,"min":number}]]} mit genau '+r.schritte.length+' Listen (pro Schritt eine, [] wenn nichts). l = kurze Bezeichnung wie "Ofen: Quiche backen", min = Minuten (obere Grenze bei Spannen).');
+  const z=(v.zeiten||[]).slice(0,r.schritte.length);while(z.length<r.schritte.length)z.push([]);
+  if(sel!=="orig"&&r0.var?.[sel]?.schritte)r0.var[sel].zeiten=z;else r0.zeiten=z;save()}catch(e){if(e.message!=="nokey")alert(e.message)}
+ cook.busy=false;cookRender()}
+function cookRender(){let o=document.getElementById("cook");if(!cook){o&&o.remove();tick();return}
  if(!o){o=document.createElement("div");o.id="cook";document.body.appendChild(o)}
- const r0=S.rez.find(x=>x.id===cook.id),r=current(r0),n=r.schritte.length,s=r.schritte[cook.i],k=(S.faktor[r0.id]||r0.por)/r0.por;
+ const r0=S.rez.find(x=>x.id===cook.id),r=current(r0),n=r.schritte.length,s=r.schritte[cook.i],k=(S.faktor[r0.id]||r0.por)/r0.por,ts=stepTimers(r,cook.i);
  o.innerHTML=`<div class="row"><b class="head">${esc(r.titel)}</b><button class="chip" onclick="cookEnd()">✕ Beenden</button></div><div class="mut">Schritt ${cook.i+1} von ${n}</div>
- <div class="cs">${esc(s)}</div>${stepTimes(s).map((t,j)=>`<button class="btn ghost" onclick="timerStart(${j})">⏱ ${esc(t.t)} starten</button>`).join(" ")}
+ <div class="cs">${esc(s)}</div>
+ <div class="card">${ts.map((t,j)=>`<div class="row" style="margin-bottom:6px"><span>${esc(t.l)}</span><span><input type="text" inputmode="decimal" id="tmin${j}" value="${t.min}" style="width:64px;display:inline;text-align:center"> Min. <button class="btn" onclick="timerStart(${j})">▶</button></span></div>`).join("")}
+ ${ts.length>1?`<button class="btn ghost" onclick="timerAll()">▶▶ Alle ${ts.length} starten</button> `:""}
+ <div class="row"><span class="mut">Eigener Timer</span><span><input type="text" id="cl" placeholder="Name" style="width:90px;display:inline"> <input type="text" inputmode="decimal" id="cm" placeholder="Min." style="width:56px;display:inline"> <button class="btn ghost" onclick="addTimer($('#cl').value,$('#cm').value)">▶</button></span></div></div>
  <div id="tms">${timersHtml()}</div>
  <div class="row" style="margin-top:14px"><button class="btn ghost" ${cook.i?"":"disabled"} onclick="cook.i--;cookRender()">← Zurück</button><button class="btn ghost" onclick="cook.ing=!cook.ing;cookRender()">🥕 Zutaten</button><button class="btn" onclick="${cook.i<n-1?"cook.i++;cookRender()":"cookDone()"}">${cook.i<n-1?"Weiter →":"Fertig 🎉"}</button></div>
+ ${Array.isArray(r.zeiten)?"":`<p><button class="btn ghost" ${cook.busy?"disabled":""} onclick="aiTimes()">${cook.busy?"KI liest …":"✨ Zeiten per KI aus dem Rezept erkennen"}</button></p>`}
  ${cook.ing?`<div class="card" style="margin-top:12px"><ul>${r.zutaten.map(z=>`<li>${z.m!=null?fmt(z.m*k)+" "+esc(z.e)+" ":""}${esc(z.n)}</li>`).join("")}</ul></div>`:""}`}
 /* ---------- Wochenplan ---------- */
 const TAGE=["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"];
