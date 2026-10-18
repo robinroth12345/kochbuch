@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Kochbuch</title>
+<title>Rothes Kochbuch</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#c2512f">
 <link rel="icon" href="icon-192.png">
@@ -38,7 +38,7 @@ textarea{min-height:110px}
 .toast{position:fixed;left:16px;right:16px;bottom:90px;background:var(--ink);color:var(--bg);padding:12px;border-radius:12px;text-align:center;z-index:9}
 .spin{opacity:.6;pointer-events:none}
 </style></head><body>
-<header><h1>🍳 Unser Kochbuch</h1></header>
+<header><h1>🍳 Rothes Kochbuch</h1></header>
 <div id="chips" class="chips"></div>
 <main id="main"></main>
 <nav>
@@ -75,7 +75,10 @@ const SEED=[{id:1,titel:"Quiche Lorraine – der Klassiker",kat:["Hauptgericht",
 const K="kochbuch-v2";
 let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest"},JSON.parse(localStorage.getItem(K)||"{}"));
 const save=()=>localStorage.setItem(K,JSON.stringify(S));
-let tab="list",kat="Alle",cur=null,sel="orig",busy=false;
+const DEFCATS=["Hauptgericht","Suppe","Salat","Beilage","Dessert","Backen","Frühstück","Snack","Getränk"];
+function ensureCats(){const a=Array.isArray(S.cats)?S.cats:[...DEFCATS];S.rez.forEach(r=>(r.kat||[]).forEach(c=>{if(!a.includes(c))a.push(c)}));S.cats=a}
+ensureCats();
+let tab="list",kat="Alle",cur=null,sel="orig",busy=false,editCat=null;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt=x=>Math.round(x*100)/100;
@@ -102,7 +105,7 @@ async function importFiles(files){
  try{for(const f of files){const sl=await slices(f);
   $("#impst").textContent="KI liest Rezept ("+sl.length+" Abschnitte) …";
   const r=await ai([{type:"text",text:"Die Bilder sind aufeinanderfolgende Abschnitte EINES Screenshots einer Rezeptseite (App/Website). Ignoriere Werbung, Kommentare und Menüs. Übernimm das Rezept auf Deutsch, Mengen so wie angezeigt (Portionszahl der Seite). Falls Nährwerte angezeigt werden, schreibe sie in naehr. "+SCHEMA},...sl.map(u=>({type:"image_url",image_url:u}))]);
-  r.id=Date.now()+Math.floor(Math.random()*999);r.var={};r.quelle="Screenshot-Import";r.kat=r.kat?.length?r.kat:["Hauptgericht"];S.rez.unshift(r);save();toast("Importiert: "+r.titel)}
+  r.id=Date.now()+Math.floor(Math.random()*999);r.var={};r.quelle="Screenshot-Import";r.kat=normCats(r.kat?.length?r.kat:["Hauptgericht"]);S.rez.unshift(r);save();toast("Importiert: "+r.titel)}
   tab="list";kat="Alle";cur=S.rez[0].id;sel="orig"}catch(e){if(e.message!=="nokey")alert("Import fehlgeschlagen: "+e.message)}
  busy=false;render()}
 async function makeVariant(id,typ){const r=S.rez.find(x=>x.id===id);if(busy)return;busy=true;render();
@@ -119,11 +122,11 @@ function current(r){if(sel==="orig"||!r.var?.[sel])return r;const v=r.var[sel];
  return {...r,titel:v.titel||r.titel,zutaten:z,schritte:v.schritte||r.schritte,hinweis:v.hinweis}}
 function render(){
  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
- const cats=["Alle","★ Favoriten",...new Set(S.rez.flatMap(r=>r.kat||[]))];
+ const used=new Set(S.rez.flatMap(r=>r.kat||[])),cats=["Alle","★ Favoriten",...S.cats.filter(c=>used.has(c)),...(S.rez.some(r=>!(r.kat||[]).length)?["Ohne Kategorie"]:[])];
  $("#chips").style.display=tab==="list"&&!cur?"flex":"none";
- $("#chips").innerHTML=cats.map(c=>`<button class="chip ${c===kat?"on":""}" onclick="kat=this.textContent;render()">${esc(c)}</button>`).join("");
+ $("#chips").innerHTML=cats.map(c=>`<button class="chip ${c===kat?"on":""}" data-c="${esc(c)}" onclick="kat=this.dataset.c;render()">${esc(c)}</button>`).join("");
  const m=$("#main");
- if(tab==="list")m.innerHTML=cur?detail(S.rez.find(r=>r.id===cur)):(S.rez.filter(r=>kat==="Alle"||(kat==="★ Favoriten"?r.fav:(r.kat||[]).includes(kat))).map(r=>`<div class="card" onclick="cur=${r.id};sel='orig';render()"><div class="row"><b class="head">${esc(r.titel)}</b><span>${r.fav?"★":""}</span></div><div class="mut">${esc((r.kat||[]).join(" · "))} · ${r.aktiv||"?"} Min. aktiv</div></div>`).join("")||"<p class=mut>Keine Rezepte.</p>");
+ if(tab==="list")m.innerHTML=cur?detail(S.rez.find(r=>r.id===cur)):(S.rez.filter(r=>kat==="Alle"||(kat==="★ Favoriten"?r.fav:kat==="Ohne Kategorie"?!(r.kat||[]).length:(r.kat||[]).includes(kat))).map(r=>`<div class="card" onclick="cur=${r.id};sel='orig';render()"><div class="row"><b class="head">${esc(r.titel)}</b><span>${r.fav?"★":""}</span></div><div class="mut">${esc((r.kat||[]).join(" · "))} · ${r.aktiv||"?"} Min. aktiv</div></div>`).join("")||"<p class=mut>Keine Rezepte.</p>");
  if(tab==="shop")m.innerHTML=shopView();
  if(tab==="find")m.innerHTML=`<div class="card"><b class="head">Was ist im Haus?</b><input type="text" id="q" placeholder="Zutaten, mit Komma getrennt (z. B. Ei, Sahne, Mehl)" oninput="finde()"><div id="res" style="margin-top:8px"></div><button class="btn ghost" onclick="ideas()">✨ Neue Ideen von der KI</button><div id="ideas" style="margin-top:8px"></div></div><div class="card"><b class="head">🎲 Überrasch mich</b><p><button class="btn" onclick="surprise()">Vorschlag aus meinem Kochbuch</button></p><div id="sur"></div></div>`;
  if(tab==="add")m.innerHTML=addView();
@@ -134,6 +137,7 @@ function detail(r0){const r=current(r0);const f=S.faktor[r0.id]||r0.por,k=f/r0.p
  const vars=Object.keys(STILE);
  return `<p class="row"><button class="btn ghost" onclick="cur=null;render()">← Zurück</button><span><button class="btn ghost" onclick="fav(${r0.id})">${r0.fav?"★":"☆"}</button> <button class="btn ghost" onclick="del(${r0.id})">🗑</button></span></p>
  <div class="card"><h2 style="margin:0 0 4px">${esc(r.titel)}</h2><div class="mut">${r0.aktiv||"?"} Min. aktiv · ${r0.gesamt||"?"} Min. gesamt</div>${r0.naehr?`<div class="mut">${esc(r0.naehr)}</div>`:""}${r0.quelle?`<div class="mut">Quelle: ${esc(r0.quelle)}</div>`:""}</div>
+ <div class="card"><div class="row"><span class="mut">🏷 ${(r0.kat||[]).map(esc).join(" · ")||"Ohne Kategorie"}</span><button class="btn ghost" onclick="editCat=editCat===${r0.id}?null:${r0.id};render()">${editCat===r0.id?"Fertig":"ändern"}</button></div>${editCat===r0.id?catPicker(r0):""}</div>
  <div class="chips" style="padding:0 0 10px"><button class="chip ${sel==="orig"?"on":""}" onclick="sel='orig';render()">Original</button>${vars.map(v=>`<button class="chip ${sel===v?"on":""}" onclick="${r0.var?.[v]?`sel='${v}';render()`:`makeVariant(${r0.id},'${v}')`}">${STILE[v]}${r0.var?.[v]?"":" ✨"}</button>`).join("")}</div>
  ${busy?`<div class="note">KI schreibt die Variante … bitte einen Moment.</div>`:`<div class="note" style="margin:-4px 0 8px">✨ = wird beim ersten Antippen per KI erzeugt und danach gespeichert.</div>`}
  <div class="card"><div class="row"><b class="head">Zutaten</b><div class="step"><button onclick="pf(${r0.id},-1)">−</button><span>${f} Port.</span><button onclick="pf(${r0.id},1)">+</button></div></div>
@@ -149,16 +153,19 @@ async function copyList(){try{await navigator.clipboard.writeText(listText());to
 function addView(){return `<div class="card"><b class="head">📷 Aus Screenshot importieren</b><p class="mut">Ein oder mehrere Rezept-Screenshots wählen. Die KI liest Zutaten und Schritte; danach kannst du alles prüfen.</p>
  <div id="imp"><label class="btn" style="display:inline-block">Screenshot(s) wählen<input type="file" accept="image/*" multiple hidden onchange="importFiles([...this.files])"></label><div class="note" id="impst"></div></div></div>
  <div class="card"><b class="head">✍️ Rezept selbst eintippen</b>
- <input type="text" id="n_t" placeholder="Titel"><input type="text" id="n_k" placeholder="Kategorie (z. B. Hauptgericht)"><input type="text" id="n_p" placeholder="Portionen" inputmode="numeric" value="4">
+ <input type="text" id="n_t" placeholder="Titel"><div class="mut" style="margin-top:6px">Kategorien</div>${S.cats.map(c=>`<label style="display:inline-block;margin:2px 10px 2px 0"><input type="checkbox" class="nk" value="${esc(c)}"> ${esc(c)}</label>`).join("")}<input type="text" id="n_k" placeholder="Neue Kategorie (optional)"><input type="text" id="n_p" placeholder="Portionen" inputmode="numeric" value="4">
  <textarea id="n_z" placeholder="Zutaten, eine pro Zeile&#10;250 g Mehl&#10;2 Eier"></textarea><textarea id="n_s" placeholder="Schritte, eine pro Zeile"></textarea>
  <button class="btn" onclick="manual()">Speichern</button></div>`}
 function parseZ(l){const m=l.trim().match(/^([\d.,\/]+)?\s*(kg|g|ml|l|EL|TL|Stk|Pck|Bund|Dose|Prise[n]?)?\s*(.+)$/i);if(!m)return null;
  let q=null;if(m[1]){q=m[1].includes("/")?m[1].split("/").reduce((a,b)=>a/b):parseFloat(m[1].replace(",","."))}return{g:"",m:q,e:m[2]||"",n:m[3]}}
 function manual(){const t=$("#n_t").value.trim();if(!t)return toast("Titel fehlt");
- const r={id:Date.now(),titel:t,kat:[$("#n_k").value.trim()||"Hauptgericht"],por:parseInt($("#n_p").value)||4,aktiv:0,gesamt:0,quelle:"selbst eingetippt",var:{},
+ const r={id:Date.now(),titel:t,kat:normCats([...document.querySelectorAll(".nk:checked")].map(x=>x.value).concat($("#n_k").value.trim()?[$("#n_k").value.trim()]:[])),por:parseInt($("#n_p").value)||4,aktiv:0,gesamt:0,quelle:"selbst eingetippt",var:{},
  zutaten:$("#n_z").value.split("\n").filter(x=>x.trim()).map(parseZ).filter(Boolean),schritte:$("#n_s").value.split("\n").filter(x=>x.trim())};
  S.rez.unshift(r);save();tab="list";cur=r.id;sel="orig";render()}
 function moreView(){return `<div class="card"><b class="head">🎨 Layout</b><div class="sw">${Object.entries(THEMES).map(([k,t])=>`<button class="${S.theme===k?"on":""}" onclick="S.theme='${k}';save();applyTheme();render()" style="font-family:${t.font}"><i style="background:${t.bg}"></i><i style="background:${t.acc}"></i><i style="background:${t.ink}"></i><br>${t.n}</button>`).join("")}</div></div>
+ <div class="card"><b class="head">🏷 Kategorien</b><p class="mut">Umbenennen, löschen, Reihenfolge ändern oder neue anlegen.</p>
+ ${S.cats.map(c=>`<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line)"><span>${esc(c)} <span class="mut">(${S.rez.filter(r=>(r.kat||[]).includes(c)).length})</span></span><span><button class="chip" data-c="${esc(c)}" onclick="moveCat(this.dataset.c,-1)">↑</button> <button class="chip" data-c="${esc(c)}" onclick="moveCat(this.dataset.c,1)">↓</button> <button class="chip" data-c="${esc(c)}" onclick="renameCat(this.dataset.c)">✏️</button> <button class="chip" data-c="${esc(c)}" onclick="delCat(this.dataset.c)">🗑</button></span></div>`).join("")}
+ <div class="row" style="margin-top:8px"><input type="text" id="nc2" placeholder="Neue Kategorie"><button class="btn" onclick="addCat($('#nc2').value)">＋</button></div></div>
  <div class="card"><b class="head">✨ KI (Mistral)</b><p class="mut">Für Screenshot-Import, Varianten und Ideen. Der Schlüssel bleibt nur auf diesem Gerät.</p>
  <input type="text" id="k" placeholder="Mistral API-Key" value="${esc(S.key)}" autocomplete="off"><input type="text" id="mo" value="${esc(S.model)}">
  <button class="btn" onclick="S.key=$('#k').value.trim();S.model=$('#mo').value.trim()||'mistral-small-latest';save();toast('Gespeichert')">Speichern</button> <button class="btn ghost" onclick="testKey()">Testen</button></div>
@@ -166,6 +173,18 @@ function moreView(){return `<div class="card"><b class="head">🎨 Layout</b><di
 async function testKey(){S.key=$("#k").value.trim();S.model=$("#mo").value.trim()||S.model;save();try{await ai("Sag nur: ok",false);toast("Verbindung klappt ✓")}catch(e){if(e.message!=="nokey")alert(e.message)}}
 
 /* ---------- Aktionen ---------- */
+function catPicker(r){return `<div style="margin-top:8px">${S.cats.map(c=>`<label style="display:block;padding:4px 0"><input type="checkbox" ${(r.kat||[]).includes(c)?"checked":""} data-c="${esc(c)}" onchange="toggleCat(${r.id},this.dataset.c)"> ${esc(c)}</label>`).join("")}<div class="row"><input type="text" id="nc" placeholder="Neue Kategorie"><button class="btn" onclick="addCat($('#nc').value,${r.id})">＋</button></div></div>`}
+function toggleCat(id,c){const r=S.rez.find(x=>x.id===id);r.kat=r.kat||[];r.kat=r.kat.includes(c)?r.kat.filter(x=>x!==c):[...r.kat,c];save();render()}
+function addCat(n,id){n=(n||"").trim();if(!n)return;const ex=S.cats.find(c=>c.toLowerCase()===n.toLowerCase());const c=ex||n;if(!ex)S.cats.push(c);
+ if(id){const r=S.rez.find(x=>x.id===id);r.kat=r.kat||[];if(!r.kat.includes(c))r.kat.push(c)}save();render()}
+function renameCat(c){const n=(prompt("Neuer Name für „"+c+"“:",c)||"").trim();if(!n||n===c)return;
+ const ex=S.cats.find(x=>x.toLowerCase()===n.toLowerCase()&&x!==c);const t=ex||n;
+ S.cats=S.cats.map(x=>x===c?t:x).filter((x,i,a)=>a.indexOf(x)===i);
+ S.rez.forEach(r=>{if((r.kat||[]).includes(c))r.kat=[...new Set(r.kat.map(x=>x===c?t:x))]});if(kat===c)kat="Alle";save();render()}
+function delCat(c){const n=S.rez.filter(r=>(r.kat||[]).includes(c)).length;if(!confirm("Kategorie „"+c+"“ löschen?"+(n?" Sie wird von "+n+" Rezept(en) entfernt, die Rezepte bleiben erhalten.":"")))return;
+ S.cats=S.cats.filter(x=>x!==c);S.rez.forEach(r=>{r.kat=(r.kat||[]).filter(x=>x!==c)});if(kat===c)kat="Alle";save();render()}
+function moveCat(c,d){const i=S.cats.indexOf(c),j=i+d;if(j<0||j>=S.cats.length)return;[S.cats[i],S.cats[j]]=[S.cats[j],S.cats[i]];save();render()}
+function normCats(l){return(l||[]).map(c=>{c=String(c).trim();const ex=S.cats.find(x=>x.toLowerCase()===c.toLowerCase());if(!ex&&c)S.cats.push(c);return ex||c}).filter(Boolean)}
 function pf(id,d){const r=S.rez.find(r=>r.id===id);S.faktor[id]=Math.max(1,(S.faktor[id]||r.por)+d);save();render()}
 function fav(id){const r=S.rez.find(r=>r.id===id);r.fav=!r.fav;save();render()}
 function del(id){if(confirm("Rezept löschen?")){S.rez=S.rez.filter(r=>r.id!==id);cur=null;save();render()}}
@@ -179,8 +198,8 @@ function finde(){const q=$("#q").value.toLowerCase().split(",").map(s=>s.trim())
  $("#res").innerHTML=!q.length?"":S.rez.map(r=>{const ns=r.zutaten.map(z=>z.n.toLowerCase()),hit=ns.filter(n=>q.some(x=>n.includes(x))).length;return{r,hit,n:ns.length}})
  .sort((a,b)=>b.hit/b.n-a.hit/a.n).map(x=>`<div class="card" onclick="tab='list';cur=${x.r.id};sel='orig';render()"><b>${esc(x.r.titel)}</b><div class="mut">${x.hit} von ${x.n} Zutaten vorhanden</div></div>`).join("")}
 function surprise(){if(!S.rez.length)return;const r=S.rez[Math.floor(Math.random()*S.rez.length)];$("#sur").innerHTML=`Wie wäre es mit <a href="#" onclick="tab='list';cur=${r.id};sel='orig';render();return false">${esc(r.titel)}</a>?`}
-function exp(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({...S,key:""},null,1)],{type:"application/json"}));a.download="kochbuch-backup.json";a.click()}
-function imp(f){f.text().then(t=>{const d=JSON.parse(t);S={...S,...d,key:S.key};save();applyTheme();render();toast("Wiederhergestellt")})}
+function exp(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({...S,key:""},null,1)],{type:"application/json"}));a.download="rothes-kochbuch-backup.json";a.click()}
+function imp(f){f.text().then(t=>{const d=JSON.parse(t);S={...S,...d,key:S.key};ensureCats();save();applyTheme();render();toast("Wiederhergestellt")})}
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;cur=null;render()});
 applyTheme();render();
 if("serviceWorker"in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
