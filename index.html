@@ -78,8 +78,8 @@ const SEED=[{id:1,titel:"Quiche Lorraine – der Klassiker",kat:["Hauptgericht",
  "Ca. 35 Min. im Ofen backen."],
  var:{veg:{titel:"Quiche Lorraine (vegetarisch)",hinweis:"Räuchertofu in etwas Öl knusprig braten; 1 TL geräuchertes Paprikapulver für das Raucharoma.",
   zutaten:null,ersetze:{"Speckwürfel":"Räuchertofu, gewürfelt"}}}}];
-const K="kochbuch-v2",VER="2026-10-18 · Timer 5";
-let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest",gh:"",ghRepo:"",meta:{},tomb:{},catsMeta:{h:"",u:0},syncAt:0,syncSt:"",plan:{n:5,days:[],wish:"",neu:true}},JSON.parse(localStorage.getItem(K)||"{}"));
+const K="kochbuch-v2",VER="2026-10-18 · Einkauf-Sync";
+let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest",gh:"",ghRepo:"",meta:{},smeta:{},tomb:{},catsMeta:{h:"",u:0},syncAt:0,syncSt:"",plan:{n:5,days:[],wish:"",neu:true}},JSON.parse(localStorage.getItem(K)||"{}"));
 const rawSave=()=>localStorage.setItem(K,JSON.stringify(S));
 const save=()=>{rawSave();schedSync()};
 const DEFCATS=["Hauptgericht","Suppe","Salat","Beilage","Dessert","Backen","Frühstück","Snack","Getränk"];
@@ -192,7 +192,7 @@ function moreView(){return `<div class="card"><b class="head">🎨 Layout</b><di
  <div class="card"><b class="head">✨ KI (Mistral)</b><p class="mut">Für Screenshot-Import, Varianten und Ideen. Der Schlüssel bleibt nur auf diesem Gerät.</p>
  <input type="text" id="k" placeholder="Mistral API-Key" value="${esc(S.key)}" autocomplete="off"><input type="text" id="mo" value="${esc(S.model)}">
  <button class="btn" onclick="S.key=$('#k').value.trim();S.model=$('#mo').value.trim()||'mistral-small-latest';save();toast('Gespeichert')">Speichern</button> <button class="btn ghost" onclick="testKey()">Testen</button></div>
- <div class="card"><b class="head">🔄 Gemeinsam synchronisieren</b><p class="mut">Rezepte und Kategorien werden in einem <b>privaten</b> GitHub-Repo abgelegt und zwischen euren Handys abgeglichen. Beide tragen dasselbe Repo und denselben Zugangsschlüssel ein. Der Schlüssel bleibt nur auf dem Gerät und ist nicht in der Sicherungsdatei.</p>
+ <div class="card"><b class="head">🔄 Gemeinsam synchronisieren</b><p class="mut">Rezepte, Kategorien und die Einkaufsliste werden in einem <b>privaten</b> GitHub-Repo abgelegt und zwischen euren Handys abgeglichen. Beide tragen dasselbe Repo und denselben Zugangsschlüssel ein. Der Schlüssel bleibt nur auf dem Gerät und ist nicht in der Sicherungsdatei.</p>
  <input type="text" id="ghr" placeholder="Repo, z. B. robinroth12345/kochbuch-daten" value="${esc(S.ghRepo)}" autocomplete="off"><input type="password" id="ght" placeholder="Zugangsschlüssel (GitHub-Token)" value="${esc(S.gh)}" autocomplete="off">
  <button class="btn" onclick="S.ghRepo=$('#ghr').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'');S.gh=$('#ght').value.trim();rawSave();sync(true)">Speichern & synchronisieren</button>
  <div class="note" id="syncst">${esc(S.syncSt||"")}${S.syncAt?" · zuletzt "+new Date(S.syncAt).toLocaleString("de-DE"):""}</div></div>
@@ -228,7 +228,7 @@ function finde(){const q=$("#q").value.toLowerCase().split(",").map(s=>s.trim())
 function surprise(){if(!S.rez.length)return;const r=S.rez[Math.floor(Math.random()*S.rez.length)];$("#sur").innerHTML=`Wie wäre es mit <a href="#" onclick="tab='list';cur=${r.id};sel='orig';render();return false">${esc(r.titel)}</a>?`}
 function exp(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({...S,key:"",gh:""},null,1)],{type:"application/json"}));a.download="rothes-kochbuch-backup.json";a.click()}
 function imp(f){f.text().then(t=>{const d=JSON.parse(t);S={...S,...d,key:S.key,gh:S.gh,ghRepo:S.ghRepo};ensureCats();save();applyTheme();render();toast("Wiederhergestellt")})}
-document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;cur=null;render()});
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;cur=null;render();if(tab==="shop"&&S.gh)sync(false)});
 /* ---------- Fotos ---------- */
 function cropImg(sl,b){return new Promise((res,rej)=>{const i=Math.max(0,Math.min(sl.length-1,Math.round(b.abschnitt||0))),im=new Image();
  im.onload=()=>{const x=+b.x,y=+b.y,w=+b.w,h=+b.h;if(!(w>.15&&h>.08&&x>=0&&y>=0&&x+w<=1.02&&y+h<=1.02))return rej();
@@ -333,7 +333,7 @@ async function planAI(){if(busy)return;S.plan.wish=$("#wish").value;busy=true;$(
 async function planGen(i){if(busy)return;busy=true;toast("Rezept wird erstellt …");try{const r=await generateRecipe(S.plan.days[i].idee);S.plan.days[i]={rid:r.id,grund:S.plan.days[i].grund};save()}catch(e){if(e.message!=="nokey")alert(e.message)}busy=false;render()}
 function planShop(){S.plan.days.filter(d=>d.rid).forEach(d=>addShop(d.rid,false));save();toast("Zutaten hinzugefügt");tab="shop";render()}
 /* ---------- Sync (privates GitHub-Repo) ---------- */
-let syncing=false,syncT=null;
+let syncing=false,syncT=null,pendingSync=false;
 const hsh=s=>{let x=5381;for(let i=0;i<s.length;i++)x=((x<<5)+x+s.charCodeAt(i))|0;return String(x)};
 const b64e=s=>{const b=new TextEncoder().encode(s);let t="";b.forEach(c=>t+=String.fromCharCode(c));return btoa(t)};
 const b64d=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,"")),c=>c.charCodeAt(0)));
@@ -351,10 +351,14 @@ async function gh(method,body){const U="https://api.github.com/repos/"+S.ghRepo+
  return{data:JSON.parse(txt),sha:j.sha}}
 function computeMeta(){S.rez.forEach(r=>{const hh=hsh(JSON.stringify(r)),m=S.meta[r.id];
   if(!m)S.meta[r.id]={h:hh,u:r.id>1e12?r.id:1};else if(m.h!==hh)S.meta[r.id]={h:hh,u:Date.now()}});
- const ch=hsh(JSON.stringify(S.cats));if(S.catsMeta.h===""){S.catsMeta={h:ch,u:0}}else if(S.catsMeta.h!==ch)S.catsMeta={h:ch,u:Date.now()}}
+ const ch=hsh(JSON.stringify(S.cats));if(S.catsMeta.h===""){S.catsMeta={h:ch,u:0}}else if(S.catsMeta.h!==ch)S.catsMeta={h:ch,u:Date.now()};
+ const ids=new Set(S.shop.map(x=>(x.id=x.id||"s"+Date.now().toString(36)+Math.random().toString(36).slice(2,6))));
+ Object.keys(S.smeta).forEach(k=>{if(!ids.has(k)){S.tomb[k]=Date.now();delete S.smeta[k]}});
+ S.shop.forEach(x=>{const hh=hsh(JSON.stringify(x)),m=S.smeta[x.id];if(!m||m.h!==hh)S.smeta[x.id]={h:hh,u:Date.now()}})}
 function merge(rem){rem=rem||{rez:[],cats:null,catsU:0,tomb:{}};
  const tomb={...(rem.tomb||{})};Object.entries(S.tomb).forEach(([k,v])=>tomb[k]=Math.max(tomb[k]||0,v));
  const L=Object.fromEntries(S.rez.map(r=>[r.id,r])),R=Object.fromEntries((rem.rez||[]).map(r=>[r.id,r]));
+ const now=Date.now();Object.keys(tomb).forEach(k=>{if(k[0]==="s"&&now-tomb[k]>5184e6)delete tomb[k]});
  const out=[],meta={};
  new Set([...Object.keys(L),...Object.keys(R)]).forEach(id=>{const l=L[id],r=R[id],lu=l?S.meta[id].u:0,ru=r?r.upd||0:0;
   if((tomb[id]||0)>Math.max(lu,ru))return;
@@ -363,18 +367,22 @@ function merge(rem){rem=rem||{rez:[],cats:null,catsU:0,tomb:{}};
  out.sort((a,b)=>b.id-a.id);
  let cats=S.cats,catsU=S.catsMeta.u;
  if(rem.cats&&(S.syncAt===0||rem.catsU>catsU)){cats=rem.cats;catsU=rem.catsU||0}
- return{out,meta,tomb,cats,catsU}}
+ const SL=Object.fromEntries(S.shop.map(x=>[x.id,x])),SR=Object.fromEntries((rem.shop||[]).map(x=>[x.id,x])),sout=[],smeta={};
+ new Set([...Object.keys(SL),...Object.keys(SR)]).forEach(id=>{const l=SL[id],r=SR[id],lu=l?S.smeta[id].u:0,ru=r?r.upd||0:0;if((tomb[id]||0)>Math.max(lu,ru))return;
+  if(l&&lu>=ru){sout.push(l);smeta[id]={h:S.smeta[id].h,u:lu}}else{const{upd,...rr}=r;sout.push(rr);smeta[id]={h:hsh(JSON.stringify(rr)),u:ru}}});
+ sout.sort((a,b)=>a.id<b.id?-1:1);
+ return{out,meta,tomb,cats,catsU,sout,smeta}}
 async function sync(manual){
  if(!S.gh||!S.ghRepo){if(manual)toast("Repo und Schlüssel eintragen");return}
- if(syncing)return;syncing=true;setSt("Synchronisiere …");
+ if(syncing){pendingSync=true;return}syncing=true;setSt("Synchronisiere …");
  try{let changed=false;
   for(let t=0;t<3;t++){const{data,sha}=await gh("GET");computeMeta();const m=merge(data);
-   const before=JSON.stringify([S.rez,S.cats]);
-   S.rez=m.out;S.meta=m.meta;S.tomb=m.tomb;S.cats=m.cats;ensureCats();
+   const before=JSON.stringify([S.rez,S.cats,S.shop]);
+   S.rez=m.out;S.meta=m.meta;S.tomb=m.tomb;S.cats=m.cats;S.shop=m.sout;S.smeta=m.smeta;ensureCats();
    S.catsMeta={h:hsh(JSON.stringify(S.cats)),u:m.catsU};
-   if(JSON.stringify([S.rez,S.cats])!==before)changed=true;
-   const payload={v:1,rez:S.rez.map(r=>({...r,upd:S.meta[r.id].u})),cats:S.cats,catsU:S.catsMeta.u,tomb:S.tomb};
-   const same=data&&JSON.stringify(payload)===JSON.stringify({v:1,rez:(data.rez||[]),cats:data.cats,catsU:data.catsU,tomb:data.tomb||{}});
+   if(JSON.stringify([S.rez,S.cats,S.shop])!==before)changed=true;
+   const payload={v:1,rez:S.rez.map(r=>({...r,upd:S.meta[r.id].u})),cats:S.cats,catsU:S.catsMeta.u,tomb:S.tomb,shop:S.shop.map(x=>({...x,upd:S.smeta[x.id].u}))};
+   const same=data&&JSON.stringify(payload)===JSON.stringify({v:1,rez:(data.rez||[]),cats:data.cats,catsU:data.catsU,tomb:data.tomb||{},shop:data.shop||[]});
    if(same)break;
    const res=await gh("PUT",{message:"Sync "+new Date().toISOString(),content:b64e(JSON.stringify(payload)),...(sha?{sha}:{})});
    if(!res.conflict)break;if(t===2)throw new Error("Gleichzeitige Änderung, bitte nochmal versuchen.")}
@@ -382,7 +390,8 @@ async function sync(manual){
   if(manual)toast("Synchronisiert ✓");
   if(changed&&!document.activeElement?.matches?.("input,textarea"))render();else setSt(S.syncSt)
  }catch(e){S.syncSt="Fehler: "+e.message;rawSave();if(manual)alert(S.syncSt);setSt(S.syncSt)}
- syncing=false}
+ syncing=false;if(pendingSync){pendingSync=false;schedSync()}}
+setInterval(()=>{if(tab==="shop"&&document.visibilityState==="visible"&&S.gh&&S.ghRepo)sync(false)},20000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")schedSync()});
 applyTheme();render();schedSync();
 if("serviceWorker"in navigator&&location.protocol.startsWith("http")){navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(r=>r.update()).catch(()=>{});let rl=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(rl||!navigator.serviceWorker.controller)return;rl=true;location.reload()})}
