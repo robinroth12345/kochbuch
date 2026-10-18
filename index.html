@@ -37,13 +37,19 @@ textarea{min-height:110px}
 .sw i{display:inline-block;width:18px;height:18px;border-radius:50%;margin-right:3px;vertical-align:middle;border:1px solid #0002}
 .toast{position:fixed;left:16px;right:16px;bottom:90px;background:var(--ink);color:var(--bg);padding:12px;border-radius:12px;text-align:center;z-index:9}
 .spin{opacity:.6;pointer-events:none}
+.hero{width:100%;max-height:230px;object-fit:cover;border-radius:var(--r);margin-bottom:12px;display:block}
+.thumb{width:62px;height:62px;border-radius:calc(var(--r) - 4px);object-fit:cover;flex:none}
+#cook{position:fixed;inset:0;z-index:20;background:var(--bg);padding:16px;overflow:auto}
+.cs{font-size:22px;line-height:1.5;margin:16px 0}
+.tm{margin:8px 0;padding:8px 12px;border:1px solid var(--acc);border-radius:10px}
+nav button{font-size:12px!important}
 </style></head><body>
 <header><h1>🍳 Rothes Kochbuch</h1></header>
 <div id="chips" class="chips"></div>
 <main id="main"></main>
 <nav>
-<button data-t="list"><b>📖</b>Rezepte</button><button data-t="shop"><b>🛒</b>Einkauf</button>
-<button data-t="find"><b>🥕</b>Zutaten</button><button data-t="add"><b>＋</b>Neu</button><button data-t="more"><b>⚙️</b>Mehr</button></nav>
+<button data-t="list"><b>📖</b>Rezepte</button><button data-t="week"><b>📅</b>Woche</button><button data-t="shop"><b>🛒</b>Einkauf</button>
+<button data-t="find"><b>💡</b>Ideen</button><button data-t="add"><b>＋</b>Neu</button><button data-t="more"><b>⚙️</b>Mehr</button></nav>
 <script>
 /* ---------- Themes (10 Layouts) ---------- */
 const THEMES={
@@ -73,8 +79,9 @@ const SEED=[{id:1,titel:"Quiche Lorraine – der Klassiker",kat:["Hauptgericht",
  var:{veg:{titel:"Quiche Lorraine (vegetarisch)",hinweis:"Räuchertofu in etwas Öl knusprig braten; 1 TL geräuchertes Paprikapulver für das Raucharoma.",
   zutaten:null,ersetze:{"Speckwürfel":"Räuchertofu, gewürfelt"}}}}];
 const K="kochbuch-v2";
-let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest"},JSON.parse(localStorage.getItem(K)||"{}"));
-const save=()=>localStorage.setItem(K,JSON.stringify(S));
+let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest",gh:"",ghRepo:"",meta:{},tomb:{},catsMeta:{h:"",u:0},syncAt:0,syncSt:"",plan:{n:5,days:[],wish:"",neu:true}},JSON.parse(localStorage.getItem(K)||"{}"));
+const rawSave=()=>localStorage.setItem(K,JSON.stringify(S));
+const save=()=>{rawSave();schedSync()};
 const DEFCATS=["Hauptgericht","Suppe","Salat","Beilage","Dessert","Backen","Frühstück","Snack","Getränk"];
 function ensureCats(){const a=Array.isArray(S.cats)?S.cats:[...DEFCATS];S.rez.forEach(r=>(r.kat||[]).forEach(c=>{if(!a.includes(c))a.push(c)}));S.cats=a}
 ensureCats();
@@ -93,7 +100,7 @@ async function ai(content,json=true){
   body:JSON.stringify({model:S.model,temperature:.3,messages:[{role:"user",content}],...(json?{response_format:{type:"json_object"}}:{})})});
  if(!r.ok){const t=await r.text();throw new Error("Mistral "+r.status+": "+t.slice(0,200))}
  const j=await r.json();return json?JSON.parse(j.choices[0].message.content):j.choices[0].message.content}
-const SCHEMA=`Antworte NUR als JSON: {"titel":string,"kat":[string] (z.B. Hauptgericht, Suppe, Salat, Dessert, Backen, Frühstück, Beilage),"por":number,"aktiv":number (Min),"gesamt":number (Min),"naehr":string,"zutaten":[{"g":Gruppenname oder "","m":number oder null,"e":Einheit oder "","n":Name}],"schritte":[string]}. Mengen als Zahl, Einheit getrennt (g, ml, EL, TL, Stk …). Prisen/„etwas“ -> m:null und in den Namen schreiben.`;
+const SCHEMA=`Antworte NUR als JSON: {"titel":string,"kat":[string] (z.B. Hauptgericht, Suppe, Salat, Dessert, Backen, Frühstück, Beilage),"por":number,"aktiv":number (Min),"gesamt":number (Min),"naehr":string,"zutaten":[{"g":Gruppenname oder "","m":number oder null,"e":Einheit oder "","n":Name}],"schritte":[string],"bild":{"abschnitt":number,"x":number,"y":number,"w":number,"h":number} oder null}. Mengen als Zahl, Einheit getrennt (g, ml, EL, TL, Stk …). Prisen/„etwas“ -> m:null und in den Namen schreiben.`;
 function loadImg(f){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(f)})}
 async function slices(f){ // lange Screenshots verkleinern und in Abschnitte schneiden
  const im=await loadImg(f),W=Math.min(800,im.width),sc=W/im.width,H=Math.round(im.height*sc),SH=1600,out=[];
@@ -104,7 +111,8 @@ async function importFiles(files){
  if(busy||!files.length)return;busy=true;$("#imp").classList.add("spin");$("#impst").textContent="Bild wird gelesen …";
  try{for(const f of files){const sl=await slices(f);
   $("#impst").textContent="KI liest Rezept ("+sl.length+" Abschnitte) …";
-  const r=await ai([{type:"text",text:"Die Bilder sind aufeinanderfolgende Abschnitte EINES Screenshots einer Rezeptseite (App/Website). Ignoriere Werbung, Kommentare und Menüs. Übernimm das Rezept auf Deutsch, Mengen so wie angezeigt (Portionszahl der Seite). Falls Nährwerte angezeigt werden, schreibe sie in naehr. "+SCHEMA},...sl.map(u=>({type:"image_url",image_url:u}))]);
+  const r=await ai([{type:"text",text:"Die Bilder sind aufeinanderfolgende Abschnitte EINES Screenshots einer Rezeptseite (App/Website). Ignoriere Werbung, Kommentare und Menüs. Übernimm das Rezept auf Deutsch, Mengen so wie angezeigt (Portionszahl der Seite). Falls Nährwerte angezeigt werden, schreibe sie in naehr. Für bild: Rahmen als Anteile 0 bis 1 relativ zum jeweiligen Abschnitt (abschnitt 0 = erstes Bild) um das größte Foto des fertigen Gerichts, ohne Werbung; null, wenn keins sichtbar ist. "+SCHEMA},...sl.map(u=>({type:"image_url",image_url:u}))]);
+  const bb=r.bild;delete r.bild;try{if(bb)r.img=await cropImg(sl,bb)}catch(e){}
   r.id=Date.now()+Math.floor(Math.random()*999);r.var={};r.quelle="Screenshot-Import";r.kat=normCats(r.kat?.length?r.kat:["Hauptgericht"]);S.rez.unshift(r);save();toast("Importiert: "+r.titel)}
   tab="list";kat="Alle";cur=S.rez[0].id;sel="orig"}catch(e){if(e.message!=="nokey")alert("Import fehlgeschlagen: "+e.message)}
  busy=false;render()}
@@ -113,8 +121,17 @@ async function makeVariant(id,typ){const r=S.rez.find(x=>x.id===id);if(busy)retu
  try{const v=await ai(anw+" Behalte die Portionszahl "+r.por+". Das Original: "+JSON.stringify({titel:r.titel,por:r.por,zutaten:r.zutaten,schritte:r.schritte})+"\n"+SCHEMA+' Zusätzlich "hinweis": kurzer Tipp (1-2 Sätze).');
   r.var=r.var||{};r.var[typ]=v;save();sel=typ}catch(e){if(e.message!=="nokey")alert("Variante fehlgeschlagen: "+e.message)}
  busy=false;render()}
-async function ideas(){const q=$("#q").value.trim();if(!q||busy)return;busy=true;$("#ideas").innerHTML="<span class=mut>KI überlegt …</span>";
- try{const t=await ai("Ich habe diese Zutaten: "+q+". Schlage 5 passende Gerichte vor (kurz, je eine Zeile mit Name und 1 Satz Idee, auf Deutsch, Grundzutaten wie Salz/Öl dürfen fehlen).",false);$("#ideas").innerHTML=`<div class=card style="white-space:pre-wrap">${esc(t)}</div>`}catch(e){$("#ideas").innerHTML="";if(e.message!=="nokey")alert(e.message)}busy=false}
+async function ideas(mode){const q=($("#q")?.value||"").trim();if(busy)return;if(mode==="zut"&&!q)return toast("Erst Zutaten eintippen");
+ busy=true;$("#ideas").innerHTML="<span class=mut>KI überlegt …</span>";
+ try{const own=S.rez.slice(0,15).map(r=>r.titel).join(", ");
+  const J=' Antworte NUR als JSON: {"ideen":[{"titel":string,"satz":string}]} (satz: ein Satz, was das Gericht ausmacht).';
+  const v=await ai(mode==="zut"?"Ich habe diese Zutaten: "+q+". Schlage 5 passende Gerichte vor (Grundzutaten wie Salz, Öl, Mehl dürfen fehlen)."+J:"Überrasche mich mit 3 Gerichten, die zu meinem Geschmack passen (meine Rezepte: "+own+"). Gern andere Küche als sonst."+J);
+  window.IDEAS=v.ideen||[];$("#ideas").innerHTML=IDEAS.map((x,i)=>`<div class="card"><b>${esc(x.titel)}</b><div class="mut">${esc(x.satz)}</div><button class="btn ghost" onclick="genIdea(${i})">✨ Als Rezept speichern</button></div>`).join("")}
+ catch(e){$("#ideas").innerHTML="";if(e.message!=="nokey")alert(e.message)}busy=false}
+async function generateRecipe(t){const r=await ai('Erzeuge ein vollständiges, alltagstaugliches Rezept für "'+t+'" für 4 Portionen. Setze bild auf null. '+SCHEMA);
+ delete r.bild;r.id=Date.now()+Math.floor(Math.random()*999);r.var={};r.quelle="KI-Idee";r.kat=normCats(r.kat?.length?r.kat:["Hauptgericht"]);S.rez.unshift(r);save();return r}
+async function genIdea(i){if(busy)return;busy=true;toast("Rezept wird erstellt …");
+ try{const r=await generateRecipe(IDEAS[i].titel);cur=r.id;sel="orig";tab="list"}catch(e){if(e.message!=="nokey")alert("Fehlgeschlagen: "+e.message)}busy=false;render()}
 
 /* ---------- Ansichten ---------- */
 function current(r){if(sel==="orig"||!r.var?.[sel])return r;const v=r.var[sel];
@@ -126,9 +143,10 @@ function render(){
  $("#chips").style.display=tab==="list"&&!cur?"flex":"none";
  $("#chips").innerHTML=cats.map(c=>`<button class="chip ${c===kat?"on":""}" data-c="${esc(c)}" onclick="kat=this.dataset.c;render()">${esc(c)}</button>`).join("");
  const m=$("#main");
- if(tab==="list")m.innerHTML=cur?detail(S.rez.find(r=>r.id===cur)):(S.rez.filter(r=>kat==="Alle"||(kat==="★ Favoriten"?r.fav:kat==="Ohne Kategorie"?!(r.kat||[]).length:(r.kat||[]).includes(kat))).map(r=>`<div class="card" onclick="cur=${r.id};sel='orig';render()"><div class="row"><b class="head">${esc(r.titel)}</b><span>${r.fav?"★":""}</span></div><div class="mut">${esc((r.kat||[]).join(" · "))} · ${r.aktiv||"?"} Min. aktiv</div></div>`).join("")||"<p class=mut>Keine Rezepte.</p>");
+ if(tab==="list")m.innerHTML=cur?detail(S.rez.find(r=>r.id===cur)):(S.rez.filter(r=>kat==="Alle"||(kat==="★ Favoriten"?r.fav:kat==="Ohne Kategorie"?!(r.kat||[]).length:(r.kat||[]).includes(kat))).map(r=>`<div class="card" onclick="cur=${r.id};sel='orig';render()"><div class="row" style="justify-content:flex-start;gap:12px">${r.img?`<img class="thumb" src="${r.img}">`:""}<div style="flex:1"><div class="row"><b class="head">${esc(r.titel)}</b><span>${r.fav?"★":""}</span></div><div class="mut">${esc((r.kat||[]).join(" · "))} · ${r.aktiv||"?"} Min. aktiv${(r.cooked||[]).length?" · "+r.cooked.length+"× gekocht":""}</div></div></div></div>`).join("")||"<p class=mut>Keine Rezepte.</p>");
  if(tab==="shop")m.innerHTML=shopView();
- if(tab==="find")m.innerHTML=`<div class="card"><b class="head">Was ist im Haus?</b><input type="text" id="q" placeholder="Zutaten, mit Komma getrennt (z. B. Ei, Sahne, Mehl)" oninput="finde()"><div id="res" style="margin-top:8px"></div><button class="btn ghost" onclick="ideas()">✨ Neue Ideen von der KI</button><div id="ideas" style="margin-top:8px"></div></div><div class="card"><b class="head">🎲 Überrasch mich</b><p><button class="btn" onclick="surprise()">Vorschlag aus meinem Kochbuch</button></p><div id="sur"></div></div>`;
+ if(tab==="week")m.innerHTML=weekView();
+ if(tab==="find")m.innerHTML=`<div class="card"><b class="head">Was ist im Haus?</b><input type="text" id="q" placeholder="Zutaten, mit Komma getrennt (z. B. Ei, Sahne, Mehl)" oninput="finde()"><div id="res" style="margin-top:8px"></div><button class="btn ghost" onclick="ideas('zut')">✨ Ideen aus diesen Zutaten (KI)</button></div><div class="card"><b class="head">🎲 Überrasch mich</b><p><button class="btn" onclick="surprise()">Aus meinem Kochbuch</button> <button class="btn ghost" onclick="ideas('sur')">✨ Neu von der KI</button></p><div id="sur"></div></div><div id="ideas"></div>`;
  if(tab==="add")m.innerHTML=addView();
  if(tab==="more")m.innerHTML=moreView();
 }
@@ -136,14 +154,16 @@ function detail(r0){const r=current(r0);const f=S.faktor[r0.id]||r0.por,k=f/r0.p
  const groups=[...new Set(r.zutaten.map(z=>z.g||""))];
  const vars=Object.keys(STILE);
  return `<p class="row"><button class="btn ghost" onclick="cur=null;render()">← Zurück</button><span><button class="btn ghost" onclick="fav(${r0.id})">${r0.fav?"★":"☆"}</button> <button class="btn ghost" onclick="del(${r0.id})">🗑</button></span></p>
- <div class="card"><h2 style="margin:0 0 4px">${esc(r.titel)}</h2><div class="mut">${r0.aktiv||"?"} Min. aktiv · ${r0.gesamt||"?"} Min. gesamt</div>${r0.naehr?`<div class="mut">${esc(r0.naehr)}</div>`:""}${r0.quelle?`<div class="mut">Quelle: ${esc(r0.quelle)}</div>`:""}</div>
+ ${r0.img?`<img class="hero" src="${r0.img}">`:""}<div class="card"><h2 style="margin:0 0 4px">${esc(r.titel)}</h2><div class="mut">${r0.aktiv||"?"} Min. aktiv · ${r0.gesamt||"?"} Min. gesamt</div>${r0.naehr?`<div class="mut">${esc(r0.naehr)}</div>`:""}${r0.quelle?`<div class="mut">Quelle: ${esc(r0.quelle)}</div>`:""}</div>
  <div class="card"><div class="row"><span class="mut">🏷 ${(r0.kat||[]).map(esc).join(" · ")||"Ohne Kategorie"}</span><button class="btn ghost" onclick="editCat=editCat===${r0.id}?null:${r0.id};render()">${editCat===r0.id?"Fertig":"ändern"}</button></div>${editCat===r0.id?catPicker(r0):""}</div>
+ <div class="card"><div class="row" style="justify-content:flex-start;gap:8px;flex-wrap:wrap"><button class="btn" onclick="cookStart(${r0.id})">👩‍🍳 Kochmodus</button><button class="btn ghost" onclick="cooked(${r0.id})">✓ Gekocht</button><label class="btn ghost" style="margin:2px 0">📷 Foto<input type="file" accept="image/*" hidden onchange="setPhoto(${r0.id},this.files[0])"></label>${r0.img?`<button class="btn ghost" onclick="S.rez.find(x=>x.id===${r0.id}).img=null;save();render()">Foto ✕</button>`:""}</div><div class="row" style="margin-top:6px"><span>${[1,2,3,4,5].map(n=>`<span onclick="setStars(${r0.id},${n})" style="font-size:26px;cursor:pointer;color:var(--acc)">${(r0.stars||0)>=n?"★":"☆"}</span>`).join("")}</span><span class="mut">${(r0.cooked||[]).length?(r0.cooked.length+"× gekocht · zuletzt "+new Date(r0.cooked[r0.cooked.length-1]).toLocaleDateString("de-DE")):"noch nicht gekocht"}</span></div></div>
  <div class="chips" style="padding:0 0 10px"><button class="chip ${sel==="orig"?"on":""}" onclick="sel='orig';render()">Original</button>${vars.map(v=>`<button class="chip ${sel===v?"on":""}" onclick="${r0.var?.[v]?`sel='${v}';render()`:`makeVariant(${r0.id},'${v}')`}">${STILE[v]}${r0.var?.[v]?"":" ✨"}</button>`).join("")}</div>
  ${busy?`<div class="note">KI schreibt die Variante … bitte einen Moment.</div>`:`<div class="note" style="margin:-4px 0 8px">✨ = wird beim ersten Antippen per KI erzeugt und danach gespeichert.</div>`}
  <div class="card"><div class="row"><b class="head">Zutaten</b><div class="step"><button onclick="pf(${r0.id},-1)">−</button><span>${f} Port.</span><button onclick="pf(${r0.id},1)">+</button></div></div>
  ${groups.map(g=>`${g?`<h3>${esc(g)}</h3>`:""}<ul>${r.zutaten.filter(z=>(z.g||"")===g).map(z=>`<li>${z.m!=null?fmt(z.m*k)+" "+esc(z.e)+" ":""}${esc(z.n)}</li>`).join("")}</ul>`).join("")}
  <p><button class="btn" onclick="toShop(${r0.id})">🛒 Auf die Einkaufsliste</button></p>${r.hinweis?`<div class="note">💡 ${esc(r.hinweis)}</div>`:""}</div>
- <div class="card"><b class="head">Zubereitung</b>${r.schritte.map((s,i)=>`<p><b>${i+1}.</b> ${esc(s)}</p>`).join("")}</div>`}
+ <div class="card"><b class="head">Zubereitung</b>${r.schritte.map((s,i)=>`<p><b>${i+1}.</b> ${esc(s)}</p>`).join("")}</div>
+ <div class="card"><b class="head">👨‍🍳 Frag den Koch</b><div class="chips" style="padding:6px 0">${["Welche Beilage passt?","Welches Getränk passt?","Was kann ich ersetzen, wenn …","Wie bewahre ich Reste auf?"].map(q=>`<button class="chip" data-q="${esc(q)}" onclick="$('#aq').value=this.dataset.q">${esc(q)}</button>`).join("")}</div><input type="text" id="aq" placeholder="Deine Frage zum Rezept"><button class="btn" onclick="askCook(${r0.id})">Fragen</button><div id="ans" style="white-space:pre-wrap;margin-top:8px"></div></div>`}
 function shopView(){const open_=S.shop.filter(x=>!x.d).length;return `<div class="card"><div class="row"><b class="head">Einkaufsliste</b><span class="mut">${open_} offen</span></div>${S.shop.length?`<ul>${S.shop.map((x,i)=>`<li class="${x.d?"done":""}" onclick="S.shop[${i}].d=!S.shop[${i}].d;save();render()">${x.d?"✓":"○"} ${esc(x.t)}</li>`).join("")}</ul>`:"<p class=mut>Leer. Im Rezept „Auf die Einkaufsliste“ tippen.</p>"}</div>
  ${S.shop.length?`<p><button class="btn" onclick="share()">📤 Teilen</button> <button class="btn ghost" onclick="copyList()">Kopieren</button> <button class="btn ghost" onclick="S.shop=S.shop.filter(x=>!x.d);save();render()">Erledigte weg</button> <button class="btn ghost" onclick="if(confirm('Liste leeren?')){S.shop=[];save();render()}">Leeren</button></p>`:""}`}
 function listText(){return "🛒 Einkaufsliste\n"+S.shop.filter(x=>!x.d).map(x=>"• "+x.t).join("\n")}
@@ -169,6 +189,10 @@ function moreView(){return `<div class="card"><b class="head">🎨 Layout</b><di
  <div class="card"><b class="head">✨ KI (Mistral)</b><p class="mut">Für Screenshot-Import, Varianten und Ideen. Der Schlüssel bleibt nur auf diesem Gerät.</p>
  <input type="text" id="k" placeholder="Mistral API-Key" value="${esc(S.key)}" autocomplete="off"><input type="text" id="mo" value="${esc(S.model)}">
  <button class="btn" onclick="S.key=$('#k').value.trim();S.model=$('#mo').value.trim()||'mistral-small-latest';save();toast('Gespeichert')">Speichern</button> <button class="btn ghost" onclick="testKey()">Testen</button></div>
+ <div class="card"><b class="head">🔄 Gemeinsam synchronisieren</b><p class="mut">Rezepte und Kategorien werden in einem <b>privaten</b> GitHub-Repo abgelegt und zwischen euren Handys abgeglichen. Beide tragen dasselbe Repo und denselben Zugangsschlüssel ein. Der Schlüssel bleibt nur auf dem Gerät und ist nicht in der Sicherungsdatei.</p>
+ <input type="text" id="ghr" placeholder="Repo, z. B. robinroth12345/kochbuch-daten" value="${esc(S.ghRepo)}" autocomplete="off"><input type="password" id="ght" placeholder="Zugangsschlüssel (GitHub-Token)" value="${esc(S.gh)}" autocomplete="off">
+ <button class="btn" onclick="S.ghRepo=$('#ghr').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'');S.gh=$('#ght').value.trim();rawSave();sync(true)">Speichern & synchronisieren</button>
+ <div class="note" id="syncst">${esc(S.syncSt||"")}${S.syncAt?" · zuletzt "+new Date(S.syncAt).toLocaleString("de-DE"):""}</div></div>
  <div class="card"><b class="head">💾 Sicherung</b><p class="mut">Die Rezepte liegen nur in diesem Browser. Regelmäßig exportieren und die Datei z. B. in Box ablegen.</p><button class="btn" onclick="exp()">Exportieren</button> <label class="btn ghost" style="display:inline-block">Importieren<input type="file" accept=".json" hidden onchange="imp(this.files[0])"></label></div>`}
 async function testKey(){S.key=$("#k").value.trim();S.model=$("#mo").value.trim()||S.model;save();try{await ai("Sag nur: ok",false);toast("Verbindung klappt ✓")}catch(e){if(e.message!=="nokey")alert(e.message)}}
 
@@ -187,20 +211,126 @@ function moveCat(c,d){const i=S.cats.indexOf(c),j=i+d;if(j<0||j>=S.cats.length)r
 function normCats(l){return(l||[]).map(c=>{c=String(c).trim();const ex=S.cats.find(x=>x.toLowerCase()===c.toLowerCase());if(!ex&&c)S.cats.push(c);return ex||c}).filter(Boolean)}
 function pf(id,d){const r=S.rez.find(r=>r.id===id);S.faktor[id]=Math.max(1,(S.faktor[id]||r.por)+d);save();render()}
 function fav(id){const r=S.rez.find(r=>r.id===id);r.fav=!r.fav;save();render()}
-function del(id){if(confirm("Rezept löschen?")){S.rez=S.rez.filter(r=>r.id!==id);cur=null;save();render()}}
-function toShop(id){const r0=S.rez.find(r=>r.id===id),r=current(r0),f=(S.faktor[id]||r0.por)/r0.por;
+function del(id){if(confirm("Rezept löschen?")){S.tomb[id]=Date.now();S.rez=S.rez.filter(r=>r.id!==id);cur=null;save();render()}}
+function addShop(id,useSel){const r0=S.rez.find(r=>r.id===id),r=useSel?current(r0):r0,f=(S.faktor[id]||r0.por)/r0.por;
  r.zutaten.forEach(z=>{const mm=z.m!=null?z.m*f:null;
   const hit=mm!=null&&S.shop.find(x=>!x.d&&x.n===z.n&&x.e===z.e&&x.m!=null);
   if(hit){hit.m+=mm;hit.t=fmt(hit.m)+" "+z.e+" "+z.n}
   else S.shop.push({n:z.n,e:z.e,m:mm,t:(mm!=null?fmt(mm)+" "+z.e+" ":"")+z.n})});
- save();toast("Zutaten hinzugefügt");tab="shop";render()}
+}
+function toShop(id){addShop(id,true);save();toast("Zutaten hinzugefügt");tab="shop";render()}
 function finde(){const q=$("#q").value.toLowerCase().split(",").map(s=>s.trim()).filter(Boolean);
  $("#res").innerHTML=!q.length?"":S.rez.map(r=>{const ns=r.zutaten.map(z=>z.n.toLowerCase()),hit=ns.filter(n=>q.some(x=>n.includes(x))).length;return{r,hit,n:ns.length}})
  .sort((a,b)=>b.hit/b.n-a.hit/a.n).map(x=>`<div class="card" onclick="tab='list';cur=${x.r.id};sel='orig';render()"><b>${esc(x.r.titel)}</b><div class="mut">${x.hit} von ${x.n} Zutaten vorhanden</div></div>`).join("")}
 function surprise(){if(!S.rez.length)return;const r=S.rez[Math.floor(Math.random()*S.rez.length)];$("#sur").innerHTML=`Wie wäre es mit <a href="#" onclick="tab='list';cur=${r.id};sel='orig';render();return false">${esc(r.titel)}</a>?`}
-function exp(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({...S,key:""},null,1)],{type:"application/json"}));a.download="rothes-kochbuch-backup.json";a.click()}
-function imp(f){f.text().then(t=>{const d=JSON.parse(t);S={...S,...d,key:S.key};ensureCats();save();applyTheme();render();toast("Wiederhergestellt")})}
+function exp(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({...S,key:"",gh:""},null,1)],{type:"application/json"}));a.download="rothes-kochbuch-backup.json";a.click()}
+function imp(f){f.text().then(t=>{const d=JSON.parse(t);S={...S,...d,key:S.key,gh:S.gh,ghRepo:S.ghRepo};ensureCats();save();applyTheme();render();toast("Wiederhergestellt")})}
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;cur=null;render()});
-applyTheme();render();
+/* ---------- Fotos ---------- */
+function cropImg(sl,b){return new Promise((res,rej)=>{const i=Math.max(0,Math.min(sl.length-1,Math.round(b.abschnitt||0))),im=new Image();
+ im.onload=()=>{const x=+b.x,y=+b.y,w=+b.w,h=+b.h;if(!(w>.15&&h>.08&&x>=0&&y>=0&&x+w<=1.02&&y+h<=1.02))return rej();
+  const sx=x*im.width,sy=y*im.height,sw=Math.min(w*im.width,im.width-sx),sh=Math.min(h*im.height,im.height-sy),W=Math.min(480,sw),c=document.createElement("canvas");
+  c.width=W;c.height=Math.round(W*sh/sw);c.getContext("2d").drawImage(im,sx,sy,sw,sh,0,0,c.width,c.height);res(c.toDataURL("image/jpeg",.7))};
+ im.onerror=rej;im.src=sl[i]})}
+async function setPhoto(id,f){if(!f)return;const im=await loadImg(f),W=Math.min(480,im.width),H=Math.round(W*3/4),c=document.createElement("canvas");c.width=W;c.height=H;
+ const sc=Math.max(W/im.width,H/im.height),dw=im.width*sc,dh=im.height*sc;c.getContext("2d").drawImage(im,(W-dw)/2,(H-dh)/2,dw,dh);
+ S.rez.find(r=>r.id===id).img=c.toDataURL("image/jpeg",.72);save();render()}
+function cooked(id){const r=S.rez.find(x=>x.id===id);r.cooked=[...(r.cooked||[]),Date.now()];save();toast("Notiert 👩‍🍳");render()}
+function setStars(id,n){const r=S.rez.find(x=>x.id===id);r.stars=r.stars===n?0:n;save();render()}
+async function askCook(id){const q=$("#aq").value.trim();if(!q)return;const r=current(S.rez.find(x=>x.id===id));$("#ans").textContent="…";
+ try{$("#ans").textContent=await ai("Du bist ein freundlicher, erfahrener Koch. Rezept: "+JSON.stringify({titel:r.titel,zutaten:r.zutaten.map(z=>(z.m??"")+" "+z.e+" "+z.n),schritte:r.schritte})+"\nFrage: "+q+"\nAntworte kurz (höchstens 5 Sätze) auf Deutsch.",false)}catch(e){$("#ans").textContent="";if(e.message!=="nokey")alert(e.message)}}
+/* ---------- Kochmodus ---------- */
+let cook=null,timers=[],wl=null;
+async function cookStart(id){cook={id,i:0,ing:false};try{wl=await navigator.wakeLock?.request("screen")}catch(e){}cookRender()}
+function cookEnd(){cook=null;try{wl?.release()}catch(e){}wl=null;cookRender()}
+function cookDone(){const r=S.rez.find(x=>x.id===cook.id);r.cooked=[...(r.cooked||[]),Date.now()];save();cookEnd();toast("Guten Appetit! 🍽");render()}
+function stepTimes(s){const out=[],re=/(\d+)(?:\s*[–-]\s*(\d+))?\s*(Min\.?|Minuten|Std\.?|Stunden?)/gi;let m;while((m=re.exec(s))){out.push({sec:+(m[2]||m[1])*(/^S/i.test(m[3])?3600:60),t:m[0]})}return out}
+function timerStart(j){const t=stepTimes(current(S.rez.find(x=>x.id===cook.id)).schritte[cook.i])[j];timers.push({end:Date.now()+t.sec*1000,label:t.t,done:false});cookRender()}
+const mmss=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+function timersHtml(){return timers.map((t,i)=>`<div class="tm">⏱ ${esc(t.label)}: <b>${t.done?"⏰ abgelaufen":mmss(Math.max(0,Math.round((t.end-Date.now())/1000)))}</b> <button class="chip" onclick="timers.splice(${i},1);cookRender()">✕</button></div>`).join("")}
+function beep(){try{const a=new(window.AudioContext||window.webkitAudioContext)();[0,.35,.7].forEach(d=>{const o=a.createOscillator();o.frequency.value=880;o.connect(a.destination);o.start(a.currentTime+d);o.stop(a.currentTime+d+.2)})}catch(e){}try{navigator.vibrate?.([300,150,300,150,300])}catch(e){}}
+setInterval(()=>{timers.forEach(t=>{if(!t.done&&Date.now()>=t.end){t.done=true;beep();toast("⏰ "+t.label+" ist um!")}});const e=document.getElementById("tms");if(cook&&e)e.innerHTML=timersHtml()},1000);
+function cookRender(){let o=document.getElementById("cook");if(!cook){o&&o.remove();return}
+ if(!o){o=document.createElement("div");o.id="cook";document.body.appendChild(o)}
+ const r0=S.rez.find(x=>x.id===cook.id),r=current(r0),n=r.schritte.length,s=r.schritte[cook.i],k=(S.faktor[r0.id]||r0.por)/r0.por;
+ o.innerHTML=`<div class="row"><b class="head">${esc(r.titel)}</b><button class="chip" onclick="cookEnd()">✕ Beenden</button></div><div class="mut">Schritt ${cook.i+1} von ${n}</div>
+ <div class="cs">${esc(s)}</div>${stepTimes(s).map((t,j)=>`<button class="btn ghost" onclick="timerStart(${j})">⏱ ${esc(t.t)} starten</button>`).join(" ")}
+ <div id="tms">${timersHtml()}</div>
+ <div class="row" style="margin-top:14px"><button class="btn ghost" ${cook.i?"":"disabled"} onclick="cook.i--;cookRender()">← Zurück</button><button class="btn ghost" onclick="cook.ing=!cook.ing;cookRender()">🥕 Zutaten</button><button class="btn" onclick="${cook.i<n-1?"cook.i++;cookRender()":"cookDone()"}">${cook.i<n-1?"Weiter →":"Fertig 🎉"}</button></div>
+ ${cook.ing?`<div class="card" style="margin-top:12px"><ul>${r.zutaten.map(z=>`<li>${z.m!=null?fmt(z.m*k)+" "+esc(z.e)+" ":""}${esc(z.n)}</li>`).join("")}</ul></div>`:""}`}
+/* ---------- Wochenplan ---------- */
+const TAGE=["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"];
+function weekView(){const p=S.plan;return `<div class="card"><b class="head">📅 Wochenplan</b>
+ <div class="row" style="margin:6px 0"><span>Anzahl Tage</span><div class="step"><button onclick="S.plan.n=Math.max(1,S.plan.n-1);save();render()">−</button><span>${p.n}</span><button onclick="S.plan.n=Math.min(7,S.plan.n+1);save();render()">+</button></div></div>
+ <input type="text" id="wish" placeholder="Wünsche, z. B. 2× vegetarisch, 1× Fisch, unter der Woche schnell" value="${esc(p.wish)}">
+ <label style="display:block;margin:6px 0"><input type="checkbox" ${p.neu?"checked":""} onchange="S.plan.neu=this.checked;save()"> KI darf neue Ideen ergänzen</label>
+ <button class="btn" onclick="planAI()">✨ Vorschlag von der KI</button> <button class="btn ghost" onclick="planLocal()">🎲 Aus meinem Buch mischen</button><div id="wst" class="note"></div></div>
+ ${p.days.map((d,i)=>{const r=d.rid&&S.rez.find(x=>x.id===d.rid);return `<div class="card"><div class="mut">${TAGE[i]}</div><div class="row"><b class="head">${r?`<a href="#" style="color:inherit" onclick="tab='list';cur=${r.id};sel='orig';render();return false">${esc(r.titel)}</a>`:d.idee?esc(d.idee)+" <span class=mut>(Idee)</span>":"– frei –"}</b><span><button class="chip" onclick="planReroll(${i})">🎲</button> <button class="chip" onclick="S.plan.days[${i}]={};save();render()">✕</button></span></div>${d.grund?`<div class="mut">${esc(d.grund)}</div>`:""}${d.idee&&!r?`<button class="btn ghost" onclick="planGen(${i})">✨ Rezept dazu erzeugen</button>`:""}</div>`}).join("")}
+ ${p.days.some(d=>d.rid)?`<p><button class="btn" onclick="planShop()">🛒 Zutaten der Woche auf die Einkaufsliste</button></p>`:""}`}
+function planPick(n,ex){const pool=S.rez.filter(r=>!ex.includes(r.id)).sort(()=>Math.random()-.5),used={},out=[];
+ while(out.length<n&&pool.length){let b=0,bs=1e9;pool.forEach((r,i)=>{const s=(r.kat||[]).reduce((a,c)=>a+(used[c]||0),0)+Math.random();if(s<bs){bs=s;b=i}});
+  const r=pool.splice(b,1)[0];(r.kat||[]).forEach(c=>used[c]=(used[c]||0)+1);out.push(r)}return out}
+function planLocal(){S.plan.wish=$("#wish").value;const rs=planPick(S.plan.n,[]);S.plan.days=Array.from({length:S.plan.n},(_,i)=>rs[i]?{rid:rs[i].id}:{});save();render()}
+function planReroll(i){const used=S.plan.days.map(d=>d.rid).filter(Boolean),r=planPick(1,used)[0];S.plan.days[i]=r?{rid:r.id}:{};save();render()}
+async function planAI(){if(busy)return;S.plan.wish=$("#wish").value;busy=true;$("#wst").textContent="KI plant die Woche …";
+ try{const list=S.rez.map(r=>({rid:r.id,titel:r.titel,kategorien:r.kat,minuten:r.aktiv||null,gekocht:(r.cooked||[]).length,sterne:r.stars||0}));
+  const v=await ai("Plane "+S.plan.n+" Abendessen für eine Familie. Sorge für Abwechslung und Ausgewogenheit (Gemüse, Fleisch/Fisch/vegetarisch gemischt, schnelle und aufwändigere Gerichte verteilen, nicht zwei ähnliche hintereinander). Wünsche: "+(S.plan.wish||"keine")+". Meine Rezepte: "+JSON.stringify(list)+". "+(S.plan.neu?"Nutze vorrangig meine Rezepte (rid), ergänze höchstens "+Math.ceil(S.plan.n/3)+" neue Ideen (rid null, idee = Gerichtname).":"Nutze ausschließlich meine Rezepte, kein Rezept doppelt, wenn genug vorhanden.")+' Antworte NUR als JSON: {"tage":[{"rid":number oder null,"idee":string oder null,"grund":string (kurz)}]} mit genau '+S.plan.n+" Einträgen.");
+  const ids=new Set(S.rez.map(r=>r.id));S.plan.days=(v.tage||[]).slice(0,S.plan.n).map(t=>ids.has(t.rid)?{rid:t.rid,grund:t.grund}:(S.plan.neu&&t.idee?{idee:t.idee,grund:t.grund}:{}));save()}
+ catch(e){if(e.message!=="nokey")alert("Planung fehlgeschlagen: "+e.message)}busy=false;render()}
+async function planGen(i){if(busy)return;busy=true;toast("Rezept wird erstellt …");try{const r=await generateRecipe(S.plan.days[i].idee);S.plan.days[i]={rid:r.id,grund:S.plan.days[i].grund};save()}catch(e){if(e.message!=="nokey")alert(e.message)}busy=false;render()}
+function planShop(){S.plan.days.filter(d=>d.rid).forEach(d=>addShop(d.rid,false));save();toast("Zutaten hinzugefügt");tab="shop";render()}
+/* ---------- Sync (privates GitHub-Repo) ---------- */
+let syncing=false,syncT=null;
+const hsh=s=>{let x=5381;for(let i=0;i<s.length;i++)x=((x<<5)+x+s.charCodeAt(i))|0;return String(x)};
+const b64e=s=>{const b=new TextEncoder().encode(s);let t="";b.forEach(c=>t+=String.fromCharCode(c));return btoa(t)};
+const b64d=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,"")),c=>c.charCodeAt(0)));
+function schedSync(){if(!S.gh||!S.ghRepo)return;clearTimeout(syncT);syncT=setTimeout(()=>sync(false),4000)}
+function setSt(t){S.syncSt=t;const e=document.getElementById("syncst");if(e)e.textContent=t+(S.syncAt?" · zuletzt "+new Date(S.syncAt).toLocaleString("de-DE"):"")}
+async function gh(method,body){const U="https://api.github.com/repos/"+S.ghRepo+"/contents/kochbuch.json";const r=await fetch(U+(method==="GET"?"?t="+Date.now():""),
+ {method,headers:{Authorization:"Bearer "+S.gh,Accept:"application/vnd.github+json",...(body?{"Content-Type":"application/json"}:{})},cache:"no-store",body:body?JSON.stringify(body):undefined});
+ if(method==="GET"&&r.status===404)return{data:null,sha:null};
+ if(r.status===401)throw new Error("Zugangsschlüssel ungültig oder abgelaufen (401).");
+ if(r.status===403||r.status===404)throw new Error("Kein Zugriff auf das Repo ("+r.status+"). Name und Rechte des Schlüssels prüfen.");
+ if(method==="PUT"&&(r.status===409||r.status===422))return{conflict:true};
+ if(!r.ok)throw new Error("GitHub "+r.status);
+ const j=await r.json();if(method!=="GET")return{ok:true};
+ let txt;if(j.content)txt=b64d(j.content);else{const rr=await fetch(U+"?t="+Date.now(),{headers:{Authorization:"Bearer "+S.gh,Accept:"application/vnd.github.raw+json"},cache:"no-store"});if(!rr.ok)throw new Error("GitHub "+rr.status);txt=await rr.text()}
+ return{data:JSON.parse(txt),sha:j.sha}}
+function computeMeta(){S.rez.forEach(r=>{const hh=hsh(JSON.stringify(r)),m=S.meta[r.id];
+  if(!m)S.meta[r.id]={h:hh,u:r.id>1e12?r.id:1};else if(m.h!==hh)S.meta[r.id]={h:hh,u:Date.now()}});
+ const ch=hsh(JSON.stringify(S.cats));if(S.catsMeta.h===""){S.catsMeta={h:ch,u:0}}else if(S.catsMeta.h!==ch)S.catsMeta={h:ch,u:Date.now()}}
+function merge(rem){rem=rem||{rez:[],cats:null,catsU:0,tomb:{}};
+ const tomb={...(rem.tomb||{})};Object.entries(S.tomb).forEach(([k,v])=>tomb[k]=Math.max(tomb[k]||0,v));
+ const L=Object.fromEntries(S.rez.map(r=>[r.id,r])),R=Object.fromEntries((rem.rez||[]).map(r=>[r.id,r]));
+ const out=[],meta={};
+ new Set([...Object.keys(L),...Object.keys(R)]).forEach(id=>{const l=L[id],r=R[id],lu=l?S.meta[id].u:0,ru=r?r.upd||0:0;
+  if((tomb[id]||0)>Math.max(lu,ru))return;
+  if(l&&lu>=ru){out.push(l);meta[id]={h:S.meta[id].h,u:lu}}
+  else{const{upd,...rr}=r;out.push(rr);meta[id]={h:hsh(JSON.stringify(rr)),u:ru}}});
+ out.sort((a,b)=>b.id-a.id);
+ let cats=S.cats,catsU=S.catsMeta.u;
+ if(rem.cats&&(S.syncAt===0||rem.catsU>catsU)){cats=rem.cats;catsU=rem.catsU||0}
+ return{out,meta,tomb,cats,catsU}}
+async function sync(manual){
+ if(!S.gh||!S.ghRepo){if(manual)toast("Repo und Schlüssel eintragen");return}
+ if(syncing)return;syncing=true;setSt("Synchronisiere …");
+ try{let changed=false;
+  for(let t=0;t<3;t++){const{data,sha}=await gh("GET");computeMeta();const m=merge(data);
+   const before=JSON.stringify([S.rez,S.cats]);
+   S.rez=m.out;S.meta=m.meta;S.tomb=m.tomb;S.cats=m.cats;ensureCats();
+   S.catsMeta={h:hsh(JSON.stringify(S.cats)),u:m.catsU};
+   if(JSON.stringify([S.rez,S.cats])!==before)changed=true;
+   const payload={v:1,rez:S.rez.map(r=>({...r,upd:S.meta[r.id].u})),cats:S.cats,catsU:S.catsMeta.u,tomb:S.tomb};
+   const same=data&&JSON.stringify(payload)===JSON.stringify({v:1,rez:(data.rez||[]),cats:data.cats,catsU:data.catsU,tomb:data.tomb||{}});
+   if(same)break;
+   const res=await gh("PUT",{message:"Sync "+new Date().toISOString(),content:b64e(JSON.stringify(payload)),...(sha?{sha}:{})});
+   if(!res.conflict)break;if(t===2)throw new Error("Gleichzeitige Änderung, bitte nochmal versuchen.")}
+  S.syncAt=Date.now();S.syncSt="Synchronisiert ✓";rawSave();
+  if(manual)toast("Synchronisiert ✓");
+  if(changed&&!document.activeElement?.matches?.("input,textarea"))render();else setSt(S.syncSt)
+ }catch(e){S.syncSt="Fehler: "+e.message;rawSave();if(manual)alert(S.syncSt);setSt(S.syncSt)}
+ syncing=false}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")schedSync()});
+applyTheme();render();schedSync();
 if("serviceWorker"in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script></body></html>
