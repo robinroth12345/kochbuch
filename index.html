@@ -78,7 +78,7 @@ const SEED=[{id:1,titel:"Quiche Lorraine – der Klassiker",kat:["Hauptgericht",
  "Ca. 35 Min. im Ofen backen."],
  var:{veg:{titel:"Quiche Lorraine (vegetarisch)",hinweis:"Räuchertofu in etwas Öl knusprig braten; 1 TL geräuchertes Paprikapulver für das Raucharoma.",
   zutaten:null,ersetze:{"Speckwürfel":"Räuchertofu, gewürfelt"}}}}];
-const K="kochbuch-v2",VER="2026-10-18 · Sync-Prüfung";
+const K="kochbuch-v2",VER="2026-10-18 · Sync-Prüfung 2";
 let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest",gh:"",ghRepo:"",meta:{},smeta:{},plans:[],tomb:{},catsMeta:{h:"",u:0},syncAt:0,syncSt:"",plan:{n:5,days:[],wish:"",neu:true}},JSON.parse(localStorage.getItem(K)||"{}"));
 const rawSave=()=>localStorage.setItem(K,JSON.stringify(S));
 const save=()=>{rawSave();schedSync()};
@@ -193,7 +193,7 @@ function moreView(){return `<div class="card"><b class="head">🎨 Layout</b><di
  <input type="text" id="k" placeholder="Mistral API-Key" value="${esc(S.key)}" autocomplete="off"><input type="text" id="mo" value="${esc(S.model)}">
  <button class="btn" onclick="S.key=$('#k').value.trim();S.model=$('#mo').value.trim()||'mistral-small-latest';save();toast('Gespeichert')">Speichern</button> <button class="btn ghost" onclick="testKey()">Testen</button></div>
  <div class="card"><b class="head">🔄 Gemeinsam synchronisieren</b><p class="mut">Rezepte, Kategorien und die Einkaufsliste werden in einem <b>privaten</b> GitHub-Repo abgelegt und zwischen euren Handys abgeglichen. Beide tragen dasselbe Repo und denselben Zugangsschlüssel ein. Der Schlüssel bleibt nur auf dem Gerät und ist nicht in der Sicherungsdatei.</p>
- <input type="text" id="ghr" placeholder="Repo, z. B. robinroth12345/kochbuch-daten" value="${esc(S.ghRepo)}" autocomplete="off"><input type="password" id="ght" placeholder="Zugangsschlüssel (GitHub-Token)" value="${esc(S.gh)}" autocomplete="off">
+ <input type="text" id="ghr" placeholder="Repo, z. B. robinroth12345/kochbuch-daten" value="${esc(S.ghRepo)}" autocomplete="off"><input type="text" id="ght" placeholder="Zugangsschlüssel (GitHub-Token)" value="${esc(S.gh)}" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" style="font-family:monospace;font-size:13px" oninput="$('#ghl').textContent=this.value.trim().length+' Zeichen (erwartet ca. 93)'"><div class="note" id="ghl">${S.gh?S.gh.length+" Zeichen (erwartet ca. 93)":""}</div>
  <button class="btn" onclick="saveSync()">Speichern & synchronisieren</button>
  <div class="note" style="color:var(--acc)">${S.gh&&S.ghRepo?"✓ Gespeichert: "+esc(S.ghRepo)+", Schlüssel hinterlegt (…"+esc(S.gh.slice(-4))+")":"Noch nicht eingerichtet"}</div>
  <div class="note" id="syncst">${esc(S.syncSt||"")}${S.syncAt?" · zuletzt "+new Date(S.syncAt).toLocaleString("de-DE"):""}</div></div>
