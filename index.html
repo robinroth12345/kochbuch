@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Kochbuch</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#c2512f">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{--bg:#faf6f0;--card:#fff;--ink:#2b2622;--mut:#7a6f66;--acc:#c2512f;--on:#fff;--line:#e8dfd4;--font:Georgia,'Times New Roman',serif;--r:14px;--head:Georgia,serif}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.5 var(--font);background:var(--bg);color:var(--ink);padding-bottom:76px;-webkit-tap-highlight-color:transparent}
+h1,h2,h3,.head{font-family:var(--head)}
+header{padding:18px 16px 10px}header h1{margin:0;font-size:26px;color:var(--acc)}
+main{padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:12px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:0 16px 12px}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:6px 14px;white-space:nowrap;font:inherit;font-size:14px}
+.chip.on{background:var(--acc);color:var(--on);border-color:var(--acc)}
+button,input,textarea,select{font:inherit;color:inherit}button{cursor:pointer}
+.btn{background:var(--acc);color:var(--on);border:0;border-radius:calc(var(--r) - 4px);padding:10px 14px;margin:2px 0}
+.btn.ghost{background:none;color:var(--acc);border:1px solid var(--acc)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mut{color:var(--mut);font-size:14px}
+ul{list-style:none;padding:0;margin:0}li{padding:7px 0;border-bottom:1px solid var(--line)}li:last-child{border:0}
+li.done{text-decoration:line-through;color:var(--mut)}
+h3{margin:14px 0 4px;font-size:15px;color:var(--mut)}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;padding:12px 2px;background:none;border:0;color:var(--mut);font-size:13px}nav button b{display:block;font-size:20px}nav button.on{color:var(--acc);font-weight:700}
+.step{display:flex;align-items:center;gap:10px}.step button{width:36px;height:36px;border-radius:50%;border:1px solid var(--acc);background:none;color:var(--acc);font-size:20px}
+input[type=text],textarea,select{width:100%;padding:10px;border-radius:calc(var(--r) - 4px);border:1px solid var(--line);background:var(--card);margin:4px 0}
+textarea{min-height:110px}
+.note{font-size:13px;color:var(--mut);margin-top:8px}
+.sw{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.sw button{border:2px solid var(--line);border-radius:var(--r);padding:10px;text-align:left;background:var(--card)}
+.sw button.on{border-color:var(--acc)}
+.sw i{display:inline-block;width:18px;height:18px;border-radius:50%;margin-right:3px;vertical-align:middle;border:1px solid #0002}
+.toast{position:fixed;left:16px;right:16px;bottom:90px;background:var(--ink);color:var(--bg);padding:12px;border-radius:12px;text-align:center;z-index:9}
+.spin{opacity:.6;pointer-events:none}
+</style></head><body>
+<header><h1>🍳 Unser Kochbuch</h1></header>
+<div id="chips" class="chips"></div>
+<main id="main"></main>
+<nav>
+<button data-t="list"><b>📖</b>Rezepte</button><button data-t="shop"><b>🛒</b>Einkauf</button>
+<button data-t="find"><b>🥕</b>Zutaten</button><button data-t="add"><b>＋</b>Neu</button><button data-t="more"><b>⚙️</b>Mehr</button></nav>
+<script>
+/* ---------- Themes (10 Layouts) ---------- */
+const THEMES={
+ creme:{n:"Crème Klassik",bg:"#faf6f0",card:"#ffffff",ink:"#2b2622",mut:"#7a6f66",acc:"#c2512f",line:"#e8dfd4",font:"Georgia,serif",head:"Georgia,serif",r:"14px"},
+ mint:{n:"Frisches Mint",bg:"#eef7f3",card:"#ffffff",ink:"#17332b",mut:"#5d7f74",acc:"#1f9d7a",line:"#d3e9e0",font:"system-ui,sans-serif",head:"system-ui,sans-serif",r:"18px"},
+ rose:{n:"Rosé Café",bg:"#fdf1f0",card:"#fffafa",ink:"#4a2c2f",mut:"#9a7478",acc:"#d6597a",line:"#f3d9db",font:"'Trebuchet MS',sans-serif",head:"Georgia,serif",r:"22px"},
+ nacht:{n:"Nachtküche",bg:"#17151a",card:"#232029",ink:"#f1ecf5",mut:"#a79fb3",acc:"#f2a65a",line:"#38333f",on:"#1b1410",font:"system-ui,sans-serif",head:"system-ui,sans-serif",r:"14px"},
+ toskana:{n:"Toskana",bg:"#f6ecd9",card:"#fbf5e8",ink:"#3b2a1a",mut:"#8a6e4e",acc:"#a8431f",line:"#e3d0ac",font:"'Palatino Linotype',Palatino,serif",head:"'Palatino Linotype',Palatino,serif",r:"6px"},
+ ozean:{n:"Ozean",bg:"#eaf3fb",card:"#ffffff",ink:"#12293d",mut:"#5a7690",acc:"#1e6fb8",line:"#cfe0ef",font:"system-ui,sans-serif",head:"system-ui,sans-serif",r:"12px"},
+ lavendel:{n:"Lavendel",bg:"#f3f0fa",card:"#ffffff",ink:"#2d2745",mut:"#7a7396",acc:"#7a56d6",line:"#e2dcf2",font:"'Segoe UI',system-ui,sans-serif",head:"Georgia,serif",r:"20px"},
+ retro:{n:"Retro 70er",bg:"#f4e3b5",card:"#fff4d1",ink:"#3a2412",mut:"#8b6a3d",acc:"#d9541e",line:"#e0c27f",font:"'Courier New',monospace",head:"'Courier New',monospace",r:"4px"},
+ beere:{n:"Beerenrot",bg:"#fbeff3",card:"#ffffff",ink:"#3c1626",mut:"#92607a",acc:"#a3153f",line:"#f0d3de",font:"system-ui,sans-serif",head:"Georgia,serif",r:"16px"},
+ wald:{n:"Wald & Papier",bg:"#e9ece3",card:"#f7f8f3",ink:"#222b1f",mut:"#6a7a63",acc:"#3f6b34",line:"#d3dac8",font:"'Gill Sans',Calibri,sans-serif",head:"'Gill Sans',Calibri,sans-serif",r:"2px"}
+};
+function applyTheme(){const t=THEMES[S.theme]||THEMES.creme,s=document.documentElement.style;
+ ["bg","card","ink","mut","acc","line","font","head","r"].forEach(k=>s.setProperty("--"+k,t[k]));s.setProperty("--on",t.on||"#fff")}
+
+/* ---------- Daten ---------- */
+const SEED=[{id:1,titel:"Quiche Lorraine – der Klassiker",kat:["Hauptgericht","Backen"],por:4,aktiv:25,gesamt:60,
+ naehr:"881 kcal · 21 g Eiweiß · 67 g Fett · 51 g KH pro Portion",quelle:"Chefkoch (Screenshot)",
+ zutaten:[{g:"Mürbeteig",m:250,e:"g",n:"Mehl"},{g:"Mürbeteig",m:160,e:"g",n:"Butter (eiskalt)"},{g:"Mürbeteig",m:1,e:"",n:"Ei"},{g:"Mürbeteig",m:null,e:"",n:"Salz (1 Prise)"},{g:"Mürbeteig",m:null,e:"",n:"Mehl für die Arbeitsfläche"},
+ {g:"Belag",m:100,e:"g",n:"Speckwürfel"},{g:"Belag",m:15,e:"g",n:"Butter zum Braten"},{g:"Belag",m:1,e:"",n:"Zwiebel"},{g:"Belag",m:1,e:"",n:"Porreestange"},{g:"Belag",m:4,e:"",n:"Ei (groß)"},{g:"Belag",m:250,e:"ml",n:"Sahne"},{g:"Belag",m:null,e:"",n:"Pfeffer (1 Prise)"}],
+ schritte:["Mehl auf die Arbeitsfläche häufen, in der Mitte eine Mulde eindrücken und das Ei hineingeben. Eiskalte Butter in Flocken in die Mulde geben, Salz dazu. Alles schnell zu einem Teig kneten, in Frischhaltefolie wickeln und 30 Min. kalt stellen.",
+ "Backofen auf 180 °C Ober-/Unterhitze vorheizen. Speck in etwas Butter anbraten. Porree in feine Ringe schneiden, Zwiebel würfeln, beides zum Speck geben.",
+ "Teig ausrollen, in die gefettete Quicheform (28–30 cm) drücken, mit Gabel einstechen. Speck-Gemüse verteilen. Eier und Sahne verquirlen, mit Pfeffer würzen, darübergießen.",
+ "Ca. 35 Min. im Ofen backen."],
+ var:{veg:{titel:"Quiche Lorraine (vegetarisch)",hinweis:"Räuchertofu in etwas Öl knusprig braten; 1 TL geräuchertes Paprikapulver für das Raucharoma.",
+  zutaten:null,ersetze:{"Speckwürfel":"Räuchertofu, gewürfelt"}}}}];
+const K="kochbuch-v2";
+let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest"},JSON.parse(localStorage.getItem(K)||"{}"));
+const save=()=>localStorage.setItem(K,JSON.stringify(S));
+let tab="list",kat="Alle",cur=null,sel="orig",busy=false;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt=x=>Math.round(x*100)/100;
+const STILE={veg:"🌱 Vegetarisch",indisch:"🍛 Indisch",asiatisch:"🥢 Asiatisch",italienisch:"🍝 Italienisch",mexikanisch:"🌮 Mexikanisch",orientalisch:"🧆 Orientalisch",deftig:"🥔 Deftig-deutsch",leicht:"🥗 Leicht & kalorienarm"};
+function toast(t){const d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2600)}
+
+/* ---------- Mistral ---------- */
+async function ai(content,json=true){
+ if(!S.key){toast("Bitte erst den Mistral-Key unter „Mehr“ eintragen.");throw new Error("nokey")}
+ const r=await fetch("https://api.mistral.ai/v1/chat/completions",{method:"POST",
+  headers:{"Content-Type":"application/json",Authorization:"Bearer "+S.key},
+  body:JSON.stringify({model:S.model,temperature:.3,messages:[{role:"user",content}],...(json?{response_format:{type:"json_object"}}:{})})});
+ if(!r.ok){const t=await r.text();throw new Error("Mistral "+r.status+": "+t.slice(0,200))}
+ const j=await r.json();return json?JSON.parse(j.choices[0].message.content):j.choices[0].message.content}
+const SCHEMA=`Antworte NUR als JSON: {"titel":string,"kat":[string] (z.B. Hauptgericht, Suppe, Salat, Dessert, Backen, Frühstück, Beilage),"por":number,"aktiv":number (Min),"gesamt":number (Min),"naehr":string,"zutaten":[{"g":Gruppenname oder "","m":number oder null,"e":Einheit oder "","n":Name}],"schritte":[string]}. Mengen als Zahl, Einheit getrennt (g, ml, EL, TL, Stk …). Prisen/„etwas“ -> m:null und in den Namen schreiben.`;
+function loadImg(f){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(f)})}
+async function slices(f){ // lange Screenshots verkleinern und in Abschnitte schneiden
+ const im=await loadImg(f),W=Math.min(800,im.width),sc=W/im.width,H=Math.round(im.height*sc),SH=1600,out=[];
+ for(let y=0;y<H;y+=SH-100){const h=Math.min(SH,H-y),c=document.createElement("canvas");c.width=W;c.height=h;
+  c.getContext("2d").drawImage(im,0,y/sc,im.width,h/sc,0,0,W,h);out.push(c.toDataURL("image/jpeg",.72));if(y+h>=H)break}
+ return out}
+async function importFiles(files){
+ if(busy||!files.length)return;busy=true;$("#imp").classList.add("spin");$("#impst").textContent="Bild wird gelesen …";
+ try{for(const f of files){const sl=await slices(f);
+  $("#impst").textContent="KI liest Rezept ("+sl.length+" Abschnitte) …";
+  const r=await ai([{type:"text",text:"Die Bilder sind aufeinanderfolgende Abschnitte EINES Screenshots einer Rezeptseite (App/Website). Ignoriere Werbung, Kommentare und Menüs. Übernimm das Rezept auf Deutsch, Mengen so wie angezeigt (Portionszahl der Seite). Falls Nährwerte angezeigt werden, schreibe sie in naehr. "+SCHEMA},...sl.map(u=>({type:"image_url",image_url:u}))]);
+  r.id=Date.now()+Math.floor(Math.random()*999);r.var={};r.quelle="Screenshot-Import";r.kat=r.kat?.length?r.kat:["Hauptgericht"];S.rez.unshift(r);save();toast("Importiert: "+r.titel)}
+  tab="list";kat="Alle";cur=S.rez[0].id;sel="orig"}catch(e){if(e.message!=="nokey")alert("Import fehlgeschlagen: "+e.message)}
+ busy=false;render()}
+async function makeVariant(id,typ){const r=S.rez.find(x=>x.id===id);if(busy)return;busy=true;render();
+ const anw=typ==="veg"?"Wandle das Rezept in eine vollwertige VEGETARISCHE Variante um (Fleisch/Fisch sinnvoll ersetzen, Würzung anpassen).":"Wandle das Rezept in eine "+STILE[typ].replace(/^\S+\s/,"")+" Variante um (typische Gewürze, Zutaten und Techniken).";
+ try{const v=await ai(anw+" Behalte die Portionszahl "+r.por+". Das Original: "+JSON.stringify({titel:r.titel,por:r.por,zutaten:r.zutaten,schritte:r.schritte})+"\n"+SCHEMA+' Zusätzlich "hinweis": kurzer Tipp (1-2 Sätze).');
+  r.var=r.var||{};r.var[typ]=v;save();sel=typ}catch(e){if(e.message!=="nokey")alert("Variante fehlgeschlagen: "+e.message)}
+ busy=false;render()}
+async function ideas(){const q=$("#q").value.trim();if(!q||busy)return;busy=true;$("#ideas").innerHTML="<span class=mut>KI überlegt …</span>";
+ try{const t=await ai("Ich habe diese Zutaten: "+q+". Schlage 5 passende Gerichte vor (kurz, je eine Zeile mit Name und 1 Satz Idee, auf Deutsch, Grundzutaten wie Salz/Öl dürfen fehlen).",false);$("#ideas").innerHTML=`<div class=card style="white-space:pre-wrap">${esc(t)}</div>`}catch(e){$("#ideas").innerHTML="";if(e.message!=="nokey")alert(e.message)}busy=false}
+
+/* ---------- Ansichten ---------- */
+function current(r){if(sel==="orig"||!r.var?.[sel])return r;const v=r.var[sel];
+ const z=v.zutaten||r.zutaten.map(z=>({...z,n:v.ersetze?.[z.n]||z.n}));
+ return {...r,titel:v.titel||r.titel,zutaten:z,schritte:v.schritte||r.schritte,hinweis:v.hinweis}}
+function render(){
+ document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
+ const cats=["Alle","★ Favoriten",...new Set(S.rez.flatMap(r=>r.kat||[]))];
+ $("#chips").style.display=tab==="list"&&!cur?"flex":"none";
+ $("#chips").innerHTML=cats.map(c=>`<button class="chip ${c===kat?"on":""}" onclick="kat=this.textContent;render()">${esc(c)}</button>`).join("");
+ const m=$("#main");
+ if(tab==="list")m.innerHTML=cur?detail(S.rez.find(r=>r.id===cur)):(S.rez.filter(r=>kat==="Alle"||(kat==="★ Favoriten"?r.fav:(r.kat||[]).includes(kat))).map(r=>`<div class="card" onclick="cur=${r.id};sel='orig';render()"><div class="row"><b class="head">${esc(r.titel)}</b><span>${r.fav?"★":""}</span></div><div class="mut">${esc((r.kat||[]).join(" · "))} · ${r.aktiv||"?"} Min. aktiv</div></div>`).join("")||"<p class=mut>Keine Rezepte.</p>");
+ if(tab==="shop")m.innerHTML=shopView();
+ if(tab==="find")m.innerHTML=`<div class="card"><b class="head">Was ist im Haus?</b><input type="text" id="q" placeholder="Zutaten, mit Komma getrennt (z. B. Ei, Sahne, Mehl)" oninput="finde()"><div id="res" style="margin-top:8px"></div><button class="btn ghost" onclick="ideas()">✨ Neue Ideen von der KI</button><div id="ideas" style="margin-top:8px"></div></div><div class="card"><b class="head">🎲 Überrasch mich</b><p><button class="btn" onclick="surprise()">Vorschlag aus meinem Kochbuch</button></p><div id="sur"></div></div>`;
+ if(tab==="add")m.innerHTML=addView();
+ if(tab==="more")m.innerHTML=moreView();
+}
+function detail(r0){const r=current(r0);const f=S.faktor[r0.id]||r0.por,k=f/r0.por;
+ const groups=[...new Set(r.zutaten.map(z=>z.g||""))];
+ const vars=Object.keys(STILE);
+ return `<p class="row"><button class="btn ghost" onclick="cur=null;render()">← Zurück</button><span><button class="btn ghost" onclick="fav(${r0.id})">${r0.fav?"★":"☆"}</button> <button class="btn ghost" onclick="del(${r0.id})">🗑</button></span></p>
+ <div class="card"><h2 style="margin:0 0 4px">${esc(r.titel)}</h2><div class="mut">${r0.aktiv||"?"} Min. aktiv · ${r0.gesamt||"?"} Min. gesamt</div>${r0.naehr?`<div class="mut">${esc(r0.naehr)}</div>`:""}${r0.quelle?`<div class="mut">Quelle: ${esc(r0.quelle)}</div>`:""}</div>
+ <div class="chips" style="padding:0 0 10px"><button class="chip ${sel==="orig"?"on":""}" onclick="sel='orig';render()">Original</button>${vars.map(v=>`<button class="chip ${sel===v?"on":""}" onclick="${r0.var?.[v]?`sel='${v}';render()`:`makeVariant(${r0.id},'${v}')`}">${STILE[v]}${r0.var?.[v]?"":" ✨"}</button>`).join("")}</div>
+ ${busy?`<div class="note">KI schreibt die Variante … bitte einen Moment.</div>`:`<div class="note" style="margin:-4px 0 8px">✨ = wird beim ersten Antippen per KI erzeugt und danach gespeichert.</div>`}
+ <div class="card"><div class="row"><b class="head">Zutaten</b><div class="step"><button onclick="pf(${r0.id},-1)">−</button><span>${f} Port.</span><button onclick="pf(${r0.id},1)">+</button></div></div>
+ ${groups.map(g=>`${g?`<h3>${esc(g)}</h3>`:""}<ul>${r.zutaten.filter(z=>(z.g||"")===g).map(z=>`<li>${z.m!=null?fmt(z.m*k)+" "+esc(z.e)+" ":""}${esc(z.n)}</li>`).join("")}</ul>`).join("")}
+ <p><button class="btn" onclick="toShop(${r0.id})">🛒 Auf die Einkaufsliste</button></p>${r.hinweis?`<div class="note">💡 ${esc(r.hinweis)}</div>`:""}</div>
+ <div class="card"><b class="head">Zubereitung</b>${r.schritte.map((s,i)=>`<p><b>${i+1}.</b> ${esc(s)}</p>`).join("")}</div>`}
+function shopView(){const open_=S.shop.filter(x=>!x.d).length;return `<div class="card"><div class="row"><b class="head">Einkaufsliste</b><span class="mut">${open_} offen</span></div>${S.shop.length?`<ul>${S.shop.map((x,i)=>`<li class="${x.d?"done":""}" onclick="S.shop[${i}].d=!S.shop[${i}].d;save();render()">${x.d?"✓":"○"} ${esc(x.t)}</li>`).join("")}</ul>`:"<p class=mut>Leer. Im Rezept „Auf die Einkaufsliste“ tippen.</p>"}</div>
+ ${S.shop.length?`<p><button class="btn" onclick="share()">📤 Teilen</button> <button class="btn ghost" onclick="copyList()">Kopieren</button> <button class="btn ghost" onclick="S.shop=S.shop.filter(x=>!x.d);save();render()">Erledigte weg</button> <button class="btn ghost" onclick="if(confirm('Liste leeren?')){S.shop=[];save();render()}">Leeren</button></p>`:""}`}
+function listText(){return "🛒 Einkaufsliste\n"+S.shop.filter(x=>!x.d).map(x=>"• "+x.t).join("\n")}
+async function share(){const t=listText();if(navigator.share){try{await navigator.share({title:"Einkaufsliste",text:t});return}catch(e){if(e.name==="AbortError")return}}
+ window.open("https://wa.me/?text="+encodeURIComponent(t),"_blank")}
+async function copyList(){try{await navigator.clipboard.writeText(listText());toast("Kopiert")}catch(e){prompt("Zum Kopieren:",listText())}}
+function addView(){return `<div class="card"><b class="head">📷 Aus Screenshot importieren</b><p class="mut">Ein oder mehrere Rezept-Screenshots wählen. Die KI liest Zutaten und Schritte; danach kannst du alles prüfen.</p>
+ <div id="imp"><label class="btn" style="display:inline-block">Screenshot(s) wählen<input type="file" accept="image/*" multiple hidden onchange="importFiles([...this.files])"></label><div class="note" id="impst"></div></div></div>
+ <div class="card"><b class="head">✍️ Rezept selbst eintippen</b>
+ <input type="text" id="n_t" placeholder="Titel"><input type="text" id="n_k" placeholder="Kategorie (z. B. Hauptgericht)"><input type="text" id="n_p" placeholder="Portionen" inputmode="numeric" value="4">
+ <textarea id="n_z" placeholder="Zutaten, eine pro Zeile&#10;250 g Mehl&#10;2 Eier"></textarea><textarea id="n_s" placeholder="Schritte, eine pro Zeile"></textarea>
+ <button class="btn" onclick="manual()">Speichern</button></div>`}
+function parseZ(l){const m=l.trim().match(/^([\d.,\/]+)?\s*(kg|g|ml|l|EL|TL|Stk|Pck|Bund|Dose|Prise[n]?)?\s*(.+)$/i);if(!m)return null;
+ let q=null;if(m[1]){q=m[1].includes("/")?m[1].split("/").reduce((a,b)=>a/b):parseFloat(m[1].replace(",","."))}return{g:"",m:q,e:m[2]||"",n:m[3]}}
+function manual(){const t=$("#n_t").value.trim();if(!t)return toast("Titel fehlt");
+ const r={id:Date.now(),titel:t,kat:[$("#n_k").value.trim()||"Hauptgericht"],por:parseInt($("#n_p").value)||4,aktiv:0,gesamt:0,quelle:"selbst eingetippt",var:{},
+ zutaten:$("#n_z").value.split("\n").filter(x=>x.trim()).map(parseZ).filter(Boolean),schritte:$("#n_s").value.split("\n").filter(x=>x.trim())};
+ S.rez.unshift(r);save();tab="list";cur=r.id;sel="orig";render()}
+function moreView(){return `<div class="card"><b class="head">🎨 Layout</b><div class="sw">${Object.entries(THEMES).map(([k,t])=>`<button class="${S.theme===k?"on":""}" onclick="S.theme='${k}';save();applyTheme();render()" style="font-family:${t.font}"><i style="background:${t.bg}"></i><i style="background:${t.acc}"></i><i style="background:${t.ink}"></i><br>${t.n}</button>`).join("")}</div></div>
+ <div class="card"><b class="head">✨ KI (Mistral)</b><p class="mut">Für Screenshot-Import, Varianten und Ideen. Der Schlüssel bleibt nur auf diesem Gerät.</p>
+ <input type="text" id="k" placeholder="Mistral API-Key" value="${esc(S.key)}" autocomplete="off"><input type="text" id="mo" value="${esc(S.model)}">
+ <button class="btn" onclick="S.key=$('#k').value.trim();S.model=$('#mo').value.trim()||'mistral-small-latest';save();toast('Gespeichert')">Speichern</button> <button class="btn ghost" onclick="testKey()">Testen</button></div>
+ <div class="card"><b class="head">💾 Sicherung</b><p class="mut">Die Rezepte liegen nur in diesem Browser. Regelmäßig exportieren und die Datei z. B. in Box ablegen.</p><button class="btn" onclick="exp()">Exportieren</button> <label class="btn ghost" style="display:inline-block">Importieren<input type="file" accept=".json" hidden onchange="imp(this.files[0])"></label></div>`}
+async function testKey(){S.key=$("#k").value.trim();S.model=$("#mo").value.trim()||S.model;save();try{await ai("Sag nur: ok",false);toast("Verbindung klappt ✓")}catch(e){if(e.message!=="nokey")alert(e.message)}}
+
+/* ---------- Aktionen ---------- */
+function pf(id,d){const r=S.rez.find(r=>r.id===id);S.faktor[id]=Math.max(1,(S.faktor[id]||r.por)+d);save();render()}
+function fav(id){const r=S.rez.find(r=>r.id===id);r.fav=!r.fav;save();render()}
+function del(id){if(confirm("Rezept löschen?")){S.rez=S.rez.filter(r=>r.id!==id);cur=null;save();render()}}
+function toShop(id){const r0=S.rez.find(r=>r.id===id),r=current(r0),f=(S.faktor[id]||r0.por)/r0.por;
+ r.zutaten.forEach(z=>{const mm=z.m!=null?z.m*f:null;
+  const hit=mm!=null&&S.shop.find(x=>!x.d&&x.n===z.n&&x.e===z.e&&x.m!=null);
+  if(hit){hit.m+=mm;hit.t=fmt(hit.m)+" "+z.e+" "+z.n}
+  else S.shop.push({n:z.n,e:z.e,m:mm,t:(mm!=null?fmt(mm)+" "+z.e+" ":"")+z.n})});
+ save();toast("Zutaten hinzugefügt");tab="shop";render()}
+function finde(){const q=$("#q").value.toLowerCase().split(",").map(s=>s.trim()).filter(Boolean);
+ $("#res").innerHTML=!q.length?"":S.rez.map(r=>{const ns=r.zutaten.map(z=>z.n.toLowerCase()),hit=ns.filter(n=>q.some(x=>n.includes(x))).length;return{r,hit,n:ns.length}})
+ .sort((a,b)=>b.hit/b.n-a.hit/a.n).map(x=>`<div class="card" onclick="tab='list';cur=${x.r.id};sel='orig';render()"><b>${esc(x.r.titel)}</b><div class="mut">${x.hit} von ${x.n} Zutaten vorhanden</div></div>`).join("")}
+function surprise(){if(!S.rez.length)return;const r=S.rez[Math.floor(Math.random()*S.rez.length)];$("#sur").innerHTML=`Wie wäre es mit <a href="#" onclick="tab='list';cur=${r.id};sel='orig';render();return false">${esc(r.titel)}</a>?`}
+function exp(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({...S,key:""},null,1)],{type:"application/json"}));a.download="kochbuch-backup.json";a.click()}
+function imp(f){f.text().then(t=>{const d=JSON.parse(t);S={...S,...d,key:S.key};save();applyTheme();render();toast("Wiederhergestellt")})}
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;cur=null;render()});
+applyTheme();render();
+if("serviceWorker"in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script></body></html>
