@@ -79,7 +79,7 @@ const SEED=[{id:1,titel:"Quiche Lorraine – der Klassiker",kat:["Hauptgericht",
  "Ca. 35 Min. im Ofen backen."],
  var:{veg:{titel:"Quiche Lorraine (vegetarisch)",hinweis:"Räuchertofu in etwas Öl knusprig braten; 1 TL geräuchertes Paprikapulver für das Raucharoma.",
   zutaten:null,ersetze:{"Speckwürfel":"Räuchertofu, gewürfelt"}}}}];
-const K="kochbuch-v2",VER="2026-10-18 · Timer 2";
+const K="kochbuch-v2",VER="2026-10-18 · Bilder";
 let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest",gh:"",ghRepo:"",meta:{},tomb:{},catsMeta:{h:"",u:0},syncAt:0,syncSt:"",plan:{n:5,days:[],wish:"",neu:true}},JSON.parse(localStorage.getItem(K)||"{}"));
 const rawSave=()=>localStorage.setItem(K,JSON.stringify(S));
 const save=()=>{rawSave();schedSync()};
@@ -104,15 +104,15 @@ async function ai(content,json=true){
 const SCHEMA=`Antworte NUR als JSON: {"titel":string,"kat":[string] (z.B. Hauptgericht, Suppe, Salat, Dessert, Backen, Frühstück, Beilage),"por":number,"aktiv":number (Min),"gesamt":number (Min),"naehr":string,"zutaten":[{"g":Gruppenname oder "","m":number oder null,"e":Einheit oder "","n":Name}],"schritte":[string],"bild":{"abschnitt":number,"x":number,"y":number,"w":number,"h":number} oder null,"zeiten":[[{"l":string,"min":number}]]}. zeiten hat pro Schritt eine Liste (gleich viele Einträge wie schritte, [] wenn nichts abzuwarten ist) mit Warte-/Garzeiten (Ofen, Kochen, Braten, Ruhen, Kühlen, Gehen lassen): l = kurze Bezeichnung wie "Ofen: Quiche backen", min = Minuten (bei Zeitspannen die obere Grenze, Stunden umrechnen). Mengen als Zahl, Einheit getrennt (g, ml, EL, TL, Stk …). Prisen/„etwas“ -> m:null und in den Namen schreiben.`;
 function loadImg(f){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(f)})}
 async function slices(f){ // lange Screenshots verkleinern und in Abschnitte schneiden
- const im=await loadImg(f),W=Math.min(800,im.width),sc=W/im.width,H=Math.round(im.height*sc),SH=1600,out=[];
+ const im=await loadImg(f),W=Math.min(im.height>im.width*2.5?800:1400,im.width),sc=W/im.width,H=Math.round(im.height*sc),SH=1600,out=[];
  for(let y=0;y<H;y+=SH-100){const h=Math.min(SH,H-y),c=document.createElement("canvas");c.width=W;c.height=h;
   c.getContext("2d").drawImage(im,0,y/sc,im.width,h/sc,0,0,W,h);out.push(c.toDataURL("image/jpeg",.72));if(y+h>=H)break}
  return out}
 async function importFiles(files){
  if(busy||!files.length)return;busy=true;$("#imp").classList.add("spin");$("#impst").textContent="Bild wird gelesen …";
- try{for(const f of files){const sl=await slices(f);
+ try{const groups=($("#one")?.checked&&files.length>1)?[files]:files.map(f=>[f]);for(const g of groups){let sl=[];for(const f of g)sl=sl.concat(await slices(f));
   $("#impst").textContent="KI liest Rezept ("+sl.length+" Abschnitte) …";
-  const r=await ai([{type:"text",text:"Die Bilder sind aufeinanderfolgende Abschnitte EINES Screenshots einer Rezeptseite (App/Website). Ignoriere Werbung, Kommentare und Menüs. Übernimm das Rezept auf Deutsch, Mengen so wie angezeigt (Portionszahl der Seite). Falls Nährwerte angezeigt werden, schreibe sie in naehr. Vorhandene Kategorien: "+S.cats.join(", ")+". Wähle 1 bis 2 passende; nur wenn keine passt, schlage eine neue vor. Für bild: Rahmen als Anteile 0 bis 1 relativ zum jeweiligen Abschnitt (abschnitt 0 = erstes Bild) um das größte Foto des fertigen Gerichts, ohne Werbung; null, wenn keins sichtbar ist. "+SCHEMA},...sl.map(u=>({type:"image_url",image_url:u}))]);
+  const r=await ai([{type:"text",text:"Die Bilder zeigen EIN Rezept: Abschnitte eines Screenshots (App/Website), Fotos einer Buch- oder Zeitschriftenseite oder handgeschriebene Notizen (Handschrift sorgfältig lesen, Unleserliches sinnvoll ergänzen und mit (?) markieren). Ignoriere Werbung, Kommentare und Menüs. Übernimm das Rezept auf Deutsch, Mengen so wie angezeigt (Portionszahl der Seite). Falls Nährwerte angezeigt werden, schreibe sie in naehr. Vorhandene Kategorien: "+S.cats.join(", ")+". Wähle 1 bis 2 passende; nur wenn keine passt, schlage eine neue vor. Für bild: Rahmen als Anteile 0 bis 1 relativ zum jeweiligen Abschnitt (abschnitt 0 = erstes Bild) um das größte Foto des fertigen Gerichts, ohne Werbung; null, wenn keins sichtbar ist. "+SCHEMA},...sl.map(u=>({type:"image_url",image_url:u}))]);
   const bb=r.bild;delete r.bild;try{if(bb)r.img=await cropImg(sl,bb)}catch(e){}
   r.id=Date.now()+Math.floor(Math.random()*999);r.var={};r.quelle="Screenshot-Import";r.kat=normCats(r.kat?.length?r.kat:["Hauptgericht"]);S.rez.unshift(r);save();toast("Importiert: "+r.titel)}
   tab="list";kat="Alle";cur=S.rez[0].id;sel="orig";editCat=cur}catch(e){if(e.message!=="nokey")alert("Import fehlgeschlagen: "+e.message)}
@@ -155,9 +155,9 @@ function detail(r0){const r=current(r0);const f=S.faktor[r0.id]||r0.por,k=f/r0.p
  const groups=[...new Set(r.zutaten.map(z=>z.g||""))];
  const vars=Object.keys(STILE);
  return `<p class="row"><button class="btn ghost" onclick="cur=null;render()">← Zurück</button><span><button class="btn ghost" onclick="fav(${r0.id})">${r0.fav?"★":"☆"}</button> <button class="btn ghost" onclick="del(${r0.id})">🗑</button></span></p>
- ${r0.img?`<img class="hero" src="${r0.img}">`:""}<div class="card"><h2 style="margin:0 0 4px">${esc(r.titel)}</h2><div class="mut">${r0.aktiv||"?"} Min. aktiv · ${r0.gesamt||"?"} Min. gesamt</div>${r0.naehr?`<div class="mut">${esc(r0.naehr)}</div>`:""}${r0.quelle?`<div class="mut">Quelle: ${esc(r0.quelle)}</div>`:""}</div>
+ ${imgS&&imgS.id===r0.id?imgPanel(r0):""}${r0.img?`<img class="hero" src="${r0.img}">${r0.imgCredit?`<div class="note" style="margin:-8px 0 10px"><a href="${esc(r0.imgSrc||"#")}" target="_blank" rel="noopener">${esc(r0.imgCredit)}</a></div>`:""}`:""}<div class="card"><h2 style="margin:0 0 4px">${esc(r.titel)}</h2><div class="mut">${r0.aktiv||"?"} Min. aktiv · ${r0.gesamt||"?"} Min. gesamt</div>${r0.naehr?`<div class="mut">${esc(r0.naehr)}</div>`:""}${r0.quelle?`<div class="mut">Quelle: ${esc(r0.quelle)}</div>`:""}</div>
  <div class="card"><div class="row"><span class="mut">🏷 ${(r0.kat||[]).map(esc).join(" · ")||"Ohne Kategorie"}</span><button class="btn ghost" onclick="editCat=editCat===${r0.id}?null:${r0.id};render()">${editCat===r0.id?"Fertig":"ändern"}</button></div>${editCat===r0.id?catPicker(r0):""}</div>
- <div class="card"><div class="row" style="justify-content:flex-start;gap:8px;flex-wrap:wrap"><button class="btn" onclick="cookStart(${r0.id})">👩‍🍳 Kochmodus</button><button class="btn ghost" onclick="cooked(${r0.id})">✓ Gekocht</button><button class="btn ghost" onclick="aiTimesBtn(${r0.id})">⏱ Zeiten per KI</button><label class="btn ghost" style="margin:2px 0">📷 Foto<input type="file" accept="image/*" hidden onchange="setPhoto(${r0.id},this.files[0])"></label>${r0.img?`<button class="btn ghost" onclick="S.rez.find(x=>x.id===${r0.id}).img=null;save();render()">Foto ✕</button>`:""}</div><div class="row" style="margin-top:6px"><span>${[1,2,3,4,5].map(n=>`<span onclick="setStars(${r0.id},${n})" style="font-size:26px;cursor:pointer;color:var(--acc)">${(r0.stars||0)>=n?"★":"☆"}</span>`).join("")}</span><span class="mut">${(r0.cooked||[]).length?(r0.cooked.length+"× gekocht · zuletzt "+new Date(r0.cooked[r0.cooked.length-1]).toLocaleDateString("de-DE")):"noch nicht gekocht"}</span></div></div>
+ <div class="card"><div class="row" style="justify-content:flex-start;gap:8px;flex-wrap:wrap"><button class="btn" onclick="cookStart(${r0.id})">👩‍🍳 Kochmodus</button><button class="btn ghost" onclick="cooked(${r0.id})">✓ Gekocht</button><button class="btn ghost" onclick="aiTimesBtn(${r0.id})">⏱ Zeiten per KI</button><label class="btn ghost" style="margin:2px 0">📷 Foto<input type="file" accept="image/*" hidden onchange="setPhoto(${r0.id},this.files[0])"></label>${r0.img?`<button class="btn ghost" onclick="const q=S.rez.find(x=>x.id===${r0.id});q.img=null;q.imgCredit=null;q.imgSrc=null;save();render()">Foto ✕</button>`:`<button class="btn ghost" onclick="imgOpen(${r0.id})">🖼 Bild suchen</button>`}</div><div class="row" style="margin-top:6px"><span>${[1,2,3,4,5].map(n=>`<span onclick="setStars(${r0.id},${n})" style="font-size:26px;cursor:pointer;color:var(--acc)">${(r0.stars||0)>=n?"★":"☆"}</span>`).join("")}</span><span class="mut">${(r0.cooked||[]).length?(r0.cooked.length+"× gekocht · zuletzt "+new Date(r0.cooked[r0.cooked.length-1]).toLocaleDateString("de-DE")):"noch nicht gekocht"}</span></div></div>
  <div class="chips" style="padding:0 0 10px"><button class="chip ${sel==="orig"?"on":""}" onclick="sel='orig';render()">Original</button>${vars.map(v=>`<button class="chip ${sel===v?"on":""}" onclick="${r0.var?.[v]?`sel='${v}';render()`:`makeVariant(${r0.id},'${v}')`}">${STILE[v]}${r0.var?.[v]?"":" ✨"}</button>`).join("")}</div>
  ${busy?`<div class="note">KI schreibt die Variante … bitte einen Moment.</div>`:`<div class="note" style="margin:-4px 0 8px">✨ = wird beim ersten Antippen per KI erzeugt und danach gespeichert.</div>`}
  <div class="card"><div class="row"><b class="head">Zutaten</b><div class="step"><button onclick="pf(${r0.id},-1)">−</button><span>${f} Port.</span><button onclick="pf(${r0.id},1)">+</button></div></div>
@@ -171,8 +171,8 @@ function listText(){return "🛒 Einkaufsliste\n"+S.shop.filter(x=>!x.d).map(x=>
 async function share(){const t=listText();if(navigator.share){try{await navigator.share({title:"Einkaufsliste",text:t});return}catch(e){if(e.name==="AbortError")return}}
  window.open("https://wa.me/?text="+encodeURIComponent(t),"_blank")}
 async function copyList(){try{await navigator.clipboard.writeText(listText());toast("Kopiert")}catch(e){prompt("Zum Kopieren:",listText())}}
-function addView(){return `<div class="card"><b class="head">📷 Aus Screenshot importieren</b><p class="mut">Ein oder mehrere Rezept-Screenshots wählen. Die KI liest Zutaten und Schritte; danach kannst du alles prüfen.</p>
- <div id="imp"><label class="btn" style="display:inline-block">Screenshot(s) wählen<input type="file" accept="image/*" multiple hidden onchange="importFiles([...this.files])"></label><div class="note" id="impst"></div></div></div>
+function addView(){return `<div class="card"><b class="head">📷 Aus Screenshot importieren</b><p class="mut">Screenshots, Fotos aus Büchern oder <b>handgeschriebene Rezepte</b>. Die KI liest Zutaten und Schritte; danach kannst du alles prüfen.</p>
+ <div id="imp"><label class="btn" style="display:inline-block">🖼 Bild(er) wählen<input type="file" accept="image/*" multiple hidden onchange="importFiles([...this.files])"></label> <label class="btn ghost" style="display:inline-block">📸 Foto aufnehmen<input type="file" accept="image/*" capture="environment" hidden onchange="importFiles([...this.files])"></label><label style="display:block;margin-top:8px"><input type="checkbox" id="one"> Mehrere Bilder gehören zu <b>einem</b> Rezept (z. B. Vorder- und Rückseite)</label><div class="note" id="impst"></div></div></div>
  <div class="card"><b class="head">✍️ Rezept selbst eintippen</b>
  <input type="text" id="n_t" placeholder="Titel"><div class="mut" style="margin-top:6px">Kategorien</div>${S.cats.map(c=>`<label style="display:inline-block;margin:2px 10px 2px 0"><input type="checkbox" class="nk" value="${esc(c)}"> ${esc(c)}</label>`).join("")}<input type="text" id="n_k" placeholder="Neue Kategorie (optional)"><input type="text" id="n_p" placeholder="Portionen" inputmode="numeric" value="4">
  <textarea id="n_z" placeholder="Zutaten, eine pro Zeile&#10;250 g Mehl&#10;2 Eier"></textarea><textarea id="n_s" placeholder="Schritte, eine pro Zeile"></textarea>
@@ -236,11 +236,29 @@ function cropImg(sl,b){return new Promise((res,rej)=>{const i=Math.max(0,Math.mi
  im.onerror=rej;im.src=sl[i]})}
 async function setPhoto(id,f){if(!f)return;const im=await loadImg(f),W=Math.min(480,im.width),H=Math.round(W*3/4),c=document.createElement("canvas");c.width=W;c.height=H;
  const sc=Math.max(W/im.width,H/im.height),dw=im.width*sc,dh=im.height*sc;c.getContext("2d").drawImage(im,(W-dw)/2,(H-dh)/2,dw,dh);
- S.rez.find(r=>r.id===id).img=c.toDataURL("image/jpeg",.72);save();render()}
+ {const q=S.rez.find(r=>r.id===id);q.img=c.toDataURL("image/jpeg",.72);q.imgCredit=null;q.imgSrc=null}save();render()}
 function cooked(id){const r=S.rez.find(x=>x.id===id);r.cooked=[...(r.cooked||[]),Date.now()];save();toast("Notiert 👩‍🍳");render()}
 function setStars(id,n){const r=S.rez.find(x=>x.id===id);r.stars=r.stars===n?0:n;save();render()}
 async function askCook(id){const q=$("#aq").value.trim();if(!q)return;const r=current(S.rez.find(x=>x.id===id));$("#ans").textContent="…";
  try{$("#ans").textContent=await ai("Du bist ein freundlicher, erfahrener Koch. Rezept: "+JSON.stringify({titel:r.titel,zutaten:r.zutaten.map(z=>(z.m??"")+" "+z.e+" "+z.n),schritte:r.schritte})+"\nFrage: "+q+"\nAntworte kurz (höchstens 5 Sätze) auf Deutsch.",false)}catch(e){$("#ans").textContent="";if(e.message!=="nokey")alert(e.message)}}
+/* ---------- Bildsuche (Wikimedia Commons, frei lizenziert) ---------- */
+let imgS=null;
+const cleanT=t=>t.replace(/\(.*?\)/g,"").split(/\s[–—-]\s/)[0].replace(/\b(klassiker|einfach|schnell|nach omas art)\b/ig,"").replace(/\s+/g," ").trim();
+function imgOpen(id){const r=S.rez.find(x=>x.id===id);imgS={id,q:cleanT(r.titel),res:null,busy:false};render();imgFind()}
+function imgPanel(r){return `<div class="card"><div class="row"><b class="head">🖼 Bild suchen</b><button class="chip" onclick="imgS=null;render()">✕</button></div>
+ <div class="row"><input type="text" id="iq" value="${esc(imgS.q)}" onkeydown="if(event.key==='Enter')imgFind()"><button class="btn" onclick="imgFind()">Suchen</button></div>
+ ${imgS.busy?'<div class="note">Suche läuft …</div>':imgS.res===null?"":imgS.err?`<div class="note">${esc(imgS.err)}</div>`:imgS.res.length?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px">${imgS.res.map((x,i)=>`<img src="${esc(x.url)}" loading="lazy" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer" onclick="imgPick(${i})">`).join("")}</div><div class="note">Antippen zum Übernehmen. Nur frei lizenzierte Bilder von Wikimedia Commons; die Quelle wird beim Bild gespeichert.</div>`:'<div class="note">Nichts Passendes gefunden. Anderen Suchbegriff probieren, z. B. den Gerichtsnamen allein.</div>'}</div>`}
+async function imgFind(){if(!imgS)return;const q=($("#iq")?.value||imgS.q).trim();if(!q)return;imgS.q=q;imgS.busy=true;imgS.res=null;imgS.err=null;render();
+ try{const u="https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch="+encodeURIComponent(q+" filetype:bitmap")+"&gsrnamespace=6&gsrlimit=24&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=640&format=json&origin=*";
+  const j=await(await fetch(u)).json();const strip=s=>(s||"").replace(/<[^>]+>/g,"").trim();
+  imgS.res=Object.values(j.query?.pages||{}).sort((a,b)=>a.index-b.index).map(p=>{const i=p.imageinfo?.[0];if(!i)return null;const m=i.extmetadata||{};
+   return{url:i.thumburl||i.url,page:i.descriptionurl,lic:strip(m.LicenseShortName?.value),art:strip(m.Artist?.value)||"unbekannt"}}).filter(x=>x&&/^(CC|Public domain|PD)/i.test(x.lic)).slice(0,12)}
+ catch(e){imgS.err="Suche fehlgeschlagen: "+e.message}
+ imgS.busy=false;render()}
+function imgPick(i){const x=imgS.res[i],id=imgS.id,im=new Image();im.crossOrigin="anonymous";
+ im.onload=()=>{const W=Math.min(480,im.width),H=Math.round(W*3/4),c=document.createElement("canvas");c.width=W;c.height=H;const sc=Math.max(W/im.width,H/im.height),dw=im.width*sc,dh=im.height*sc;
+  c.getContext("2d").drawImage(im,(W-dw)/2,(H-dh)/2,dw,dh);const r=S.rez.find(r=>r.id===id);r.img=c.toDataURL("image/jpeg",.72);r.imgCredit="Foto: "+x.art.slice(0,60)+" · "+x.lic+" · Wikimedia Commons";r.imgSrc=x.page;imgS=null;save();render();toast("Bild gespeichert")};
+ im.onerror=()=>toast("Bild konnte nicht geladen werden");im.src=x.url}
 /* ---------- Kochmodus ---------- */
 let cook=null,timers=[],wl=null;
 async function cookStart(id){cook={id,i:0,ing:false};try{wl=await navigator.wakeLock?.request("screen")}catch(e){}cookRender()}
