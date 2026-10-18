@@ -79,7 +79,7 @@ const SEED=[{id:1,titel:"Quiche Lorraine – der Klassiker",kat:["Hauptgericht",
  "Ca. 35 Min. im Ofen backen."],
  var:{veg:{titel:"Quiche Lorraine (vegetarisch)",hinweis:"Räuchertofu in etwas Öl knusprig braten; 1 TL geräuchertes Paprikapulver für das Raucharoma.",
   zutaten:null,ersetze:{"Speckwürfel":"Räuchertofu, gewürfelt"}}}}];
-const K="kochbuch-v2";
+const K="kochbuch-v2",VER="2026-10-18 · Timer";
 let S=Object.assign({rez:SEED,shop:[],faktor:{},theme:"creme",key:"",model:"mistral-small-latest",gh:"",ghRepo:"",meta:{},tomb:{},catsMeta:{h:"",u:0},syncAt:0,syncSt:"",plan:{n:5,days:[],wish:"",neu:true}},JSON.parse(localStorage.getItem(K)||"{}"));
 const rawSave=()=>localStorage.setItem(K,JSON.stringify(S));
 const save=()=>{rawSave();schedSync()};
@@ -194,7 +194,7 @@ function moreView(){return `<div class="card"><b class="head">🎨 Layout</b><di
  <input type="text" id="ghr" placeholder="Repo, z. B. robinroth12345/kochbuch-daten" value="${esc(S.ghRepo)}" autocomplete="off"><input type="password" id="ght" placeholder="Zugangsschlüssel (GitHub-Token)" value="${esc(S.gh)}" autocomplete="off">
  <button class="btn" onclick="S.ghRepo=$('#ghr').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'');S.gh=$('#ght').value.trim();rawSave();sync(true)">Speichern & synchronisieren</button>
  <div class="note" id="syncst">${esc(S.syncSt||"")}${S.syncAt?" · zuletzt "+new Date(S.syncAt).toLocaleString("de-DE"):""}</div></div>
- <div class="card"><b class="head">💾 Sicherung</b><p class="mut">Die Rezepte liegen nur in diesem Browser. Regelmäßig exportieren und die Datei z. B. in Box ablegen.</p><button class="btn" onclick="exp()">Exportieren</button> <label class="btn ghost" style="display:inline-block">Importieren<input type="file" accept=".json" hidden onchange="imp(this.files[0])"></label></div>`}
+ <p class="note" style="text-align:center">Rothes Kochbuch · Version ${VER}</p><div class="card"><b class="head">💾 Sicherung</b><p class="mut">Die Rezepte liegen nur in diesem Browser. Regelmäßig exportieren und die Datei z. B. in Box ablegen.</p><button class="btn" onclick="exp()">Exportieren</button> <label class="btn ghost" style="display:inline-block">Importieren<input type="file" accept=".json" hidden onchange="imp(this.files[0])"></label></div>`}
 async function testKey(){S.key=$("#k").value.trim();S.model=$("#mo").value.trim()||S.model;save();try{await ai("Sag nur: ok",false);toast("Verbindung klappt ✓")}catch(e){if(e.message!=="nokey")alert(e.message)}}
 
 /* ---------- Aktionen ---------- */
@@ -352,5 +352,5 @@ async function sync(manual){
  syncing=false}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")schedSync()});
 applyTheme();render();schedSync();
-if("serviceWorker"in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
+if("serviceWorker"in navigator&&location.protocol.startsWith("http")){navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(r=>r.update()).catch(()=>{});let rl=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(rl||!navigator.serviceWorker.controller)return;rl=true;location.reload()})}
 </script></body></html>
